@@ -1,0 +1,1730 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zuhause">
+<meta name="theme-color" content="#0b1020">
+</head>
+<body>
+<title>Zuhause Hub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+<style>
+/* Layout: wall-display dashboard. Wallpaper fills the screen, glass panels float above it.
+   Landscape: left column (music, climate, access) + right column (scenes, rooms).
+   Portrait/phone: stacked. Built for Safari 12 (iPad mini 2): no flex gap, no inset, no clamp, no ?. */
+:root {
+  color-scheme: dark;
+  --ink: #ffffff;
+  --ink-2: rgba(255, 255, 255, 0.74);
+  --ink-3: rgba(255, 255, 255, 0.52);
+  --glass: rgba(255, 255, 255, 0.13);
+  --glass-2: rgba(255, 255, 255, 0.09);
+  --glass-hi: rgba(255, 255, 255, 0.38);
+  --glass-line: rgba(255, 255, 255, 0.16);
+  --solid: rgba(255, 255, 255, 0.92);
+  --solid-ink: #16181f;
+  --solid-ink-2: rgba(22, 24, 31, 0.6);
+  --warm: #ffc65c;
+  --ok: #5ee39a;
+  --warn: #ffb547;
+  --crit: #ff6b6b;
+  --shade: rgba(4, 6, 14, 0.5);
+  --ground: #0b1020;
+  --blur: 30px;
+  --sat: 170%;
+  --r-xl: 30px;
+  --r-lg: 24px;
+  --r-md: 18px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --spring: cubic-bezier(0.3, 0.8, 0.35, 1.35);
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  overflow: hidden;
+}
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+button { background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+svg { display: block; }
+
+/* ---------- wallpaper ---------- */
+#wall {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--ground);
+  background-size: cover; background-position: center;
+  z-index: 0;
+}
+#wallDim { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; opacity: 0.25; z-index: 0; pointer-events: none; }
+
+/* ---------- glass material ---------- */
+.glass {
+  position: relative;
+  background: var(--glass);
+  border-radius: var(--r-xl);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    inset 0 0 0 1px var(--glass-line),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 40px rgba(0, 0, 0, 0.2);
+}
+.glass::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: inherit; pointer-events: none;
+  background:
+    radial-gradient(120% 60% at 15% -10%, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 45%, rgba(255, 255, 255, 0) 75%, rgba(255, 255, 255, 0.06));
+}
+.glass > * { position: relative; }
+.fx-full .glass, .fx-balanced .glass {
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+}
+.fx-balanced { --blur: 18px; --sat: 140%; }
+.fx-light .glass { background: rgba(20, 24, 40, 0.55); }
+.fx-light .glass::before { opacity: 0.6; }
+
+/* inner glass: no blur of its own, sits inside a blurred panel */
+.chip, .tile, .btn-round, .scene, .seg button, .pill {
+  position: relative;
+  background: var(--glass-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  -webkit-transition: -webkit-transform 0.28s var(--spring), background-color 0.2s ease, color 0.2s ease;
+  transition: transform 0.28s var(--spring), background-color 0.2s ease, color 0.2s ease;
+}
+.pressed { -webkit-transform: scale(0.95); transform: scale(0.95); -webkit-transition-duration: 0.12s; transition-duration: 0.12s; }
+[role="button"] { cursor: pointer; outline: none; }
+[role="button"]:focus, button:focus { outline: none; }
+[role="button"]:focus-visible, button:focus-visible, input:focus-visible { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7); }
+
+/* ---------- shell ---------- */
+.app {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+  display: -webkit-box; display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+}
+.top {
+  -webkit-flex: none; flex: none;
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  -webkit-flex-wrap: wrap; flex-wrap: wrap;
+  padding-top: max(18px, env(safe-area-inset-top, 0px));
+  padding-bottom: 12px;
+  padding-left: max(22px, env(safe-area-inset-left, 0px));
+  padding-right: max(22px, env(safe-area-inset-right, 0px));
+}
+.greet { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; margin-right: 16px; }
+.greet h1 { margin: 0; font-family: var(--font-display); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.greet p { margin: 3px 0 0; color: var(--ink-2); font-size: 15px; font-weight: 500; }
+.top-right { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.top-right > * { margin-left: 10px; }
+.top-time { font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.top-weather { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 44px; padding: 0 14px 0 10px; border-radius: 22px; font-weight: 600; }
+.top-weather svg { width: 24px; height: 24px; margin-right: 6px; }
+.btn-round { width: 44px; height: 44px; border-radius: 22px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; -webkit-flex: none; flex: none; }
+.btn-round svg { width: 22px; height: 22px; }
+.status {
+  width: 100%; margin-top: 12px;
+  display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap;
+  margin-bottom: -8px;
+}
+.chip {
+  display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center;
+  height: 34px; padding: 0 13px 0 10px; border-radius: 17px;
+  margin: 0 8px 8px 0; font-size: 13.5px; font-weight: 600; white-space: nowrap;
+}
+.chip svg { width: 17px; height: 17px; margin-right: 6px; }
+.chip .dot { width: 8px; height: 8px; border-radius: 4px; margin-right: 7px; background: var(--ok); }
+.chip.is-warn .dot { background: var(--warn); }
+.chip.is-active { background: var(--solid); color: var(--solid-ink); }
+
+.main {
+  -webkit-flex: 1 1 auto; flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding-top: 8px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(22px, env(safe-area-inset-left, 0px));
+  padding-right: max(22px, env(safe-area-inset-right, 0px));
+}
+.grid {
+  display: -ms-grid; display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  grid-gap: 16px; gap: 16px;
+  -webkit-align-items: start; align-items: start;
+}
+.col { display: grid; grid-gap: 16px; gap: 16px; min-width: 0; }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .col-left { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .col-left .card-media { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .col-left { grid-template-columns: minmax(0, 1fr); }
+  .greet h1 { font-size: 26px; }
+  .top-time { display: none; }
+}
+
+.card { padding: 18px; min-width: 0; }
+.card-h { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 14px; }
+.card-h h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); -webkit-flex: 1; flex: 1; }
+.card-h .meta { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+
+/* ---------- scenes ---------- */
+.scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-gap: 10px; gap: 10px; }
+.scene {
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  height: 60px; padding: 0 14px 0 8px; border-radius: 20px; font-weight: 600; font-size: 15px; min-width: 0;
+}
+.scene .ico { width: 42px; height: 42px; border-radius: 21px; -webkit-flex: none; flex: none; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; background: rgba(255, 255, 255, 0.14); margin-right: 10px; }
+.scene .ico svg { width: 22px; height: 22px; }
+.scene span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scene.is-active { background: var(--solid); color: var(--solid-ink); }
+.scene.is-active .ico { background: var(--warm); color: #3a2600; }
+
+/* ---------- rooms + tiles ---------- */
+.rooms-bar { display: -webkit-flex; display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px 2px; }
+.rooms-bar .pill { margin-right: 8px; }
+.pill { -webkit-flex: none; flex: none; height: 38px; padding: 0 16px; border-radius: 19px; font-weight: 600; font-size: 14.5px; white-space: nowrap; }
+.pill.is-active { background: var(--solid); color: var(--solid-ink); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-gap: 10px; gap: 10px; }
+@media (max-width: 480px) { .tiles, .scenes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.tile {
+  display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  height: 112px; padding: 12px 14px; border-radius: 22px; min-width: 0; text-align: left;
+}
+.tile .ico {
+  width: 40px; height: 40px; border-radius: 20px; display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.12); color: var(--ink-2); margin-bottom: auto;
+}
+.tile .ico svg { width: 22px; height: 22px; }
+.tile .name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 8px; }
+.tile .state { font-size: 13.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.tile.is-on { background: var(--solid); color: var(--solid-ink); }
+.tile.is-on .state { color: var(--solid-ink-2); }
+.tile.is-on .ico { background: var(--tint, var(--warm)); color: #2b1d00; box-shadow: 0 0 18px var(--tint, var(--warm)); }
+.tile.is-on.cool .ico { color: #fff; }
+.tile .bar { position: absolute; left: 14px; right: 14px; bottom: 8px; height: 3px; border-radius: 2px; background: rgba(0, 0, 0, 0.08); overflow: hidden; }
+.tile .bar i { display: block; height: 100%; background: var(--tint, var(--warm)); border-radius: 2px; }
+.room-h { display: -webkit-flex; display: flex; -webkit-align-items: baseline; align-items: baseline; margin: 2px 2px 12px; }
+.room-h h3 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; -webkit-flex: 1; flex: 1; }
+.room-h span { color: var(--ink-3); font-size: 13.5px; font-weight: 600; }
+.room-h .all-off { margin-left: 10px; color: var(--ink-2); font-size: 13.5px; font-weight: 600; padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,0.08); }
+
+/* ---------- media ---------- */
+.media-top { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.art { width: 92px; height: 92px; border-radius: 18px; -webkit-flex: none; flex: none; background-size: cover; background-position: center; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255,255,255,0.12); margin-right: 14px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }
+.art svg { width: 34px; height: 34px; color: rgba(255,255,255,0.6); }
+.track { min-width: 0; -webkit-flex: 1; flex: 1; }
+.track .t { font-weight: 700; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
+.track .a { color: var(--ink-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track .s { color: var(--ink-3); font-size: 12.5px; font-weight: 600; margin-top: 6px; letter-spacing: 0.02em; }
+.progress { margin-top: 14px; }
+.progress .line { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+.progress .line i { display: block; height: 100%; background: #fff; border-radius: 3px; }
+.progress .times { display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; font-size: 12px; color: var(--ink-3); font-weight: 600; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.transport { display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; -webkit-align-items: center; align-items: center; margin: 6px 0 10px; }
+.transport button { width: 58px; height: 58px; border-radius: 29px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; margin: 0 8px; -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring); }
+.transport button svg { width: 28px; height: 28px; }
+.transport .play { width: 66px; height: 66px; border-radius: 33px; background: var(--solid); color: var(--solid-ink); box-shadow: 0 8px 22px rgba(0,0,0,0.25); }
+.transport .play svg { width: 30px; height: 30px; }
+.vol { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.vol svg { width: 20px; height: 20px; color: var(--ink-2); -webkit-flex: none; flex: none; }
+.vol input { -webkit-flex: 1; flex: 1; margin: 0 10px; }
+.speakers { display: -webkit-flex; display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 14px; padding-bottom: 2px; }
+.speakers .pill { margin-right: 8px; height: 34px; padding: 0 13px; font-size: 13.5px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.speakers .pill i { width: 7px; height: 7px; border-radius: 4px; background: var(--ok); margin-right: 7px; }
+.favs-label { margin: 14px 2px 8px; font-size: 12.5px; color: var(--ink-3); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.favs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); grid-gap: 8px; gap: 8px; }
+.fav { height: 44px; border-radius: 14px; padding: 0 12px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; font-size: 13.5px; font-weight: 600; background: var(--glass-2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18); min-width: 0; -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring); }
+.fav span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fav.is-active { background: var(--solid); color: var(--solid-ink); }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none;
+  background: linear-gradient(to right, #fff 0%, #fff var(--p, 50%), rgba(255, 255, 255, 0.22) var(--p, 50%), rgba(255, 255, 255, 0.22) 100%);
+}
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
+input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; border-radius: 14px; background: #fff; }
+
+/* ---------- climate ---------- */
+.climate { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.climate .now { -webkit-flex: 1; flex: 1; min-width: 0; }
+.big-temp { font-family: var(--font-display); font-size: 52px; font-weight: 300; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.climate .sub { color: var(--ink-2); font-size: 13.5px; font-weight: 600; margin-top: 6px; }
+.climate .sub svg { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; margin-right: 2px; }
+.target { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; }
+.target .val { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 6px 0; }
+.target .lbl { font-size: 11.5px; color: var(--ink-3); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.seg { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-gap: 6px; gap: 6px; margin-top: 14px; }
+.seg button { height: 38px; border-radius: 13px; font-size: 13.5px; font-weight: 600; }
+.seg button.is-active { background: var(--solid); color: var(--solid-ink); }
+.heating { color: var(--warn); }
+
+/* ---------- access ---------- */
+.access-row { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.access-row + .access-row { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
+.access-row .ico { width: 46px; height: 46px; border-radius: 23px; -webkit-flex: none; flex: none; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; background: rgba(94, 227, 154, 0.2); color: var(--ok); margin-right: 12px; }
+.access-row .ico.open { background: rgba(255, 181, 71, 0.22); color: var(--warn); }
+.access-row .ico svg { width: 24px; height: 24px; }
+.access-row .txt { -webkit-flex: 1; flex: 1; min-width: 0; }
+.access-row .txt b { display: block; font-size: 15px; }
+.access-row .txt span { color: var(--ink-3); font-size: 13px; font-weight: 500; }
+.hold {
+  position: relative; overflow: hidden; height: 40px; padding: 0 14px; border-radius: 20px;
+  font-size: 13.5px; font-weight: 700; white-space: nowrap; background: var(--solid); color: var(--solid-ink);
+  -webkit-flex: none; flex: none; -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring);
+}
+.hold.ghost { background: rgba(255,255,255,0.14); color: var(--ink); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22); }
+.hold::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: rgba(255, 181, 71, 0.55); -webkit-transform: scaleX(0); transform: scaleX(0); -webkit-transform-origin: left; transform-origin: left; }
+.hold.holding::after { -webkit-transform: scaleX(1); transform: scaleX(1); -webkit-transition: -webkit-transform 0.9s linear; transition: transform 0.9s linear; }
+.hold span { position: relative; z-index: 1; }
+.cam-thumb { margin-top: 12px; height: 92px; border-radius: 16px; overflow: hidden; position: relative; background: linear-gradient(160deg, #39465e, #1c2230 60%, #2c2b25); background-size: cover; background-position: center; }
+.cam-thumb .live { position: absolute; left: 10px; top: 10px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; padding: 3px 8px; border-radius: 8px; background: rgba(0,0,0,0.45); }
+.cam-thumb .live i { display: inline-block; width: 6px; height: 6px; border-radius: 3px; background: var(--crit); margin-right: 5px; vertical-align: 1px; }
+.cam-thumb .door-sil { position: absolute; left: 50%; bottom: 0; width: 70px; height: 74px; margin-left: -35px; border-radius: 6px 6px 0 0; background: rgba(0,0,0,0.35); box-shadow: inset 0 0 0 2px rgba(255,255,255,0.08); }
+
+/* ---------- screensaver ---------- */
+#saver {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: rgba(2, 4, 10, 0.42);
+  display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  padding-top: max(24px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(40px, env(safe-area-inset-left, 0px));
+  padding-right: max(40px, env(safe-area-inset-right, 0px));
+  -webkit-transition: opacity 0.5s ease, background-color 1s ease; transition: opacity 0.5s ease, background-color 1s ease;
+}
+#saver.is-night { background: rgba(0, 0, 0, 0.82); }
+#saver.is-night .clock { color: rgba(255, 150, 130, 0.9); }
+#saver.is-night .s-widgets { opacity: 0.45; }
+.saver-in { width: 100%; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.clock-wrap { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; }
+.clock { font-family: var(--font-display); font-size: 168px; font-weight: 200; letter-spacing: -0.04em; line-height: 0.95; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clock-bold .clock { font-weight: 700; letter-spacing: -0.05em; }
+.s-date { font-size: 26px; font-weight: 500; color: var(--ink-2); margin-top: 10px; margin-left: 6px; }
+.s-widgets { width: 320px; -webkit-flex: none; flex: none; display: grid; grid-gap: 12px; gap: 12px; margin-left: 32px; -webkit-transition: opacity 1s ease; transition: opacity 1s ease; }
+.sw { padding: 16px 18px; border-radius: var(--r-lg); }
+.sw h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+.sw-weather { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.sw-weather svg { width: 46px; height: 46px; margin-right: 12px; -webkit-flex: none; flex: none; }
+.sw-weather .tt { font-size: 34px; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.sw-weather .cc { color: var(--ink-2); font-size: 14px; font-weight: 500; margin-top: 3px; }
+.fc { display: grid; grid-template-columns: repeat(4, 1fr); grid-gap: 6px; gap: 6px; margin-top: 12px; text-align: center; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fc svg { width: 22px; height: 22px; margin: 4px auto; }
+.fc .lo { color: var(--ink-3); }
+.ev { display: -webkit-flex; display: flex; -webkit-align-items: baseline; align-items: baseline; padding: 5px 0; }
+.ev + .ev { border-top: 1px solid rgba(255,255,255,0.08); }
+.ev .tm { width: 92px; -webkit-flex: none; flex: none; color: var(--ink-2); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ev .ti { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ev .cal { display: inline-block; width: 4px; height: 14px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; background: var(--c, var(--warm)); }
+.empty { color: var(--ink-3); font-size: 14px; }
+.sw-music { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.sw-music .art { width: 52px; height: 52px; border-radius: 12px; margin-right: 12px; }
+.sw-music .t { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-music .a { color: var(--ink-2); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-clim { display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; }
+.sw-clim div { font-size: 26px; font-weight: 300; font-variant-numeric: tabular-nums; }
+.sw-clim small { display: block; font-size: 12px; color: var(--ink-3); font-weight: 600; }
+.saver-hint { position: absolute; left: 0; right: 0; bottom: max(18px, env(safe-area-inset-bottom, 0px)); text-align: center; color: var(--ink-3); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; }
+@media (orientation: portrait), (max-width: 760px) {
+  .saver-in { -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: stretch; align-items: stretch; }
+  .clock-wrap { text-align: center; margin-bottom: 30px; }
+  .s-date { margin-left: 0; }
+  .s-widgets { width: auto; margin-left: 0; max-width: 520px; margin-right: auto; margin-left: auto; width: 100%; }
+}
+@media (max-width: 1000px) and (orientation: landscape) { .clock { font-size: 140px; } }
+@media (max-width: 600px) { .clock { font-size: 96px; } .s-date { font-size: 20px; } #saver { padding-left: 16px; padding-right: 16px; } }
+
+#black { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 7; background: #000; }
+
+/* ---------- sheets ---------- */
+#sheetWrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 8; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; padding: 20px max(16px, env(safe-area-inset-right, 0px)) 20px max(16px, env(safe-area-inset-left, 0px)); }
+.sheet-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: var(--shade); }
+.sheet {
+  width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 22px; border-radius: 34px; background: rgba(40, 44, 60, 0.42);
+  -webkit-animation: pop 0.42s var(--spring); animation: pop 0.42s var(--spring);
+}
+.sheet.wide { max-width: 640px; }
+.fx-light .sheet { background: rgba(28, 31, 44, 0.94); }
+@-webkit-keyframes pop { from { opacity: 0; -webkit-transform: scale(0.9); } to { opacity: 1; -webkit-transform: scale(1); } }
+@keyframes pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+.sheet-h { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 18px; }
+.sheet-h h2 { margin: 0; -webkit-flex: 1; flex: 1; font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.sheet-h p { margin: 2px 0 0; color: var(--ink-3); font-size: 13.5px; font-weight: 500; }
+.sheet-h .btn-round { width: 36px; height: 36px; }
+.sheet-h .btn-round svg { width: 18px; height: 18px; }
+.vs-wrap { display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; -webkit-align-items: center; align-items: center; }
+.vslider { width: 120px; height: 280px; border-radius: 36px; overflow: hidden; position: relative; background: rgba(255,255,255,0.14); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25); touch-action: none; cursor: ns-resize; }
+.vslider .fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--tint, #fff); }
+.vslider .lbl { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-weight: 700; font-size: 20px; color: var(--solid-ink); font-variant-numeric: tabular-nums; }
+.vs-side { margin-left: 22px; display: grid; grid-gap: 10px; gap: 10px; }
+.swatches { display: grid; grid-template-columns: repeat(4, 44px); grid-gap: 10px; gap: 10px; }
+.sw-c { width: 44px; height: 44px; border-radius: 22px; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.25); -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring); }
+.sw-c.is-active { box-shadow: 0 0 0 3px #fff; }
+.side-lbl { font-size: 12px; font-weight: 700; color: var(--ink-3); letter-spacing: 0.05em; text-transform: uppercase; margin-top: 4px; }
+.sheet .btn-row { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-gap: 8px; gap: 8px; margin-top: 18px; }
+.btn { height: 46px; border-radius: 16px; font-weight: 700; font-size: 14.5px; background: rgba(255,255,255,0.14); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22); -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring); }
+.btn.primary { background: var(--solid); color: var(--solid-ink); }
+
+/* settings */
+.set-sec + .set-sec { margin-top: 22px; }
+.set-sec h3 { margin: 0 0 10px; font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+.wps { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); grid-gap: 10px; gap: 10px; }
+.wp { height: 68px; border-radius: 16px; background-size: cover; background-position: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2); position: relative; -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring); }
+.wp.is-active { box-shadow: 0 0 0 3px #fff; }
+.wp span { position: absolute; left: 8px; bottom: 6px; font-size: 12px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.wp.add { background: rgba(255,255,255,0.1); display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; }
+.wp.add svg { width: 26px; height: 26px; }
+.row { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 46px; }
+.row + .row { border-top: 1px solid rgba(255,255,255,0.08); }
+.row label, .row .rl { -webkit-flex: 1; flex: 1; font-weight: 600; min-width: 0; }
+.row .rl small { display: block; color: var(--ink-3); font-weight: 500; font-size: 12.5px; }
+.row input[type="range"] { width: 46%; }
+.switch { width: 52px; height: 32px; border-radius: 16px; background: rgba(255,255,255,0.2); position: relative; -webkit-flex: none; flex: none; -webkit-transition: background-color 0.2s; transition: background-color 0.2s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 13px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.3); -webkit-transition: -webkit-transform 0.3s var(--spring); transition: transform 0.3s var(--spring); }
+.switch.on { background: var(--ok); }
+.switch.on::after { -webkit-transform: translateX(20px); transform: translateX(20px); }
+.seg-s { display: -webkit-flex; display: flex; background: rgba(255,255,255,0.1); border-radius: 12px; padding: 3px; -webkit-flex: none; flex: none; }
+.seg-s button { height: 32px; padding: 0 11px; border-radius: 9px; font-size: 13px; font-weight: 600; }
+.seg-s button.is-active { background: var(--solid); color: var(--solid-ink); }
+.field { width: 100%; height: 44px; border-radius: 12px; border: 0; padding: 0 12px; background: rgba(255,255,255,0.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); -webkit-user-select: text; user-select: text; margin-top: 6px; -webkit-appearance: none; box-sizing: border-box; }
+.field::placeholder { color: var(--ink-3); }
+.f-lbl { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-top: 10px; }
+.conn { margin-top: 10px; font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+.conn.ok { color: var(--ok); }
+.conn.err { color: var(--crit); }
+.note { color: var(--ink-3); font-size: 12.5px; line-height: 1.45; margin-top: 8px; }
+
+/* doorbell */
+.bell-cam { height: 280px; border-radius: 22px; overflow: hidden; position: relative; background: linear-gradient(170deg, #4b5a78, #1d2333 55%, #3a352a); background-size: cover; background-position: center; }
+.bell-cam .door-sil { position: absolute; left: 50%; bottom: 0; width: 150px; height: 210px; margin-left: -75px; border-radius: 10px 10px 0 0; background: rgba(0,0,0,0.35); box-shadow: inset 0 0 0 3px rgba(255,255,255,0.08); }
+.bell-cam .live { position: absolute; left: 14px; top: 14px; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background: rgba(0,0,0,0.45); }
+.bell-cam .live i { display: inline-block; width: 7px; height: 7px; border-radius: 4px; background: var(--crit); margin-right: 6px; vertical-align: 1px; }
+.bell-actions { display: grid; grid-template-columns: 1fr 1fr; grid-gap: 10px; gap: 10px; margin-top: 16px; }
+.bell-actions .hold { height: 52px; border-radius: 18px; font-size: 15px; }
+
+#toast {
+  position: fixed; left: 50%; bottom: max(26px, env(safe-area-inset-bottom, 0px)); z-index: 9;
+  -webkit-transform: translate(-50%, 30px); transform: translate(-50%, 30px); opacity: 0;
+  padding: 12px 20px; border-radius: 22px; font-weight: 600; font-size: 14.5px; white-space: nowrap;
+  background: rgba(30, 34, 48, 0.7); pointer-events: none;
+  -webkit-transition: opacity 0.25s, -webkit-transform 0.4s var(--spring); transition: opacity 0.25s, transform 0.4s var(--spring);
+}
+#toast.show { opacity: 1; -webkit-transform: translate(-50%, 0); transform: translate(-50%, 0); }
+
+.demo-badge { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 8px; background: rgba(255, 198, 92, 0.22); color: var(--warm); margin-left: 8px; vertical-align: 5px; }
+
+
+/* ================= clean layout ================= */
+.top { -webkit-align-items: flex-end; align-items: flex-end; padding-top: max(22px, env(safe-area-inset-top, 0px)); padding-bottom: 18px; }
+.hd-left { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; }
+.hd-time { font-family: var(--font-display); font-size: 52px; font-weight: 300; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.hd-date { margin-top: 6px; color: var(--ink-2); font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hd-weather { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; font-size: 20px; font-weight: 500; margin-right: 16px; color: var(--ink); }
+.hd-weather svg { width: 26px; height: 26px; margin-right: 7px; }
+.grid { grid-template-columns: 300px minmax(0, 1fr); grid-gap: 22px; gap: 22px; }
+.col { grid-gap: 14px; gap: 14px; }
+.col { grid-template-columns: minmax(0, 1fr); }
+.col-right { grid-gap: 22px; gap: 22px; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } .col-left { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (max-width: 600px) { .col-left { grid-template-columns: minmax(0, 1fr); } }
+
+.w { padding: 16px; border-radius: 26px; }
+.w-lbl { font-size: 13px; color: var(--ink-3); font-weight: 600; margin-bottom: 2px; }
+
+/* media widget */
+.wm { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.wm .art { width: 54px; height: 54px; border-radius: 12px; margin-right: 12px; box-shadow: 0 6px 14px rgba(0,0,0,0.3); }
+.wm .art svg { width: 24px; height: 24px; }
+.wm-t { -webkit-flex: 1; flex: 1; min-width: 0; }
+.wm-t .t { font-weight: 600; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wm-t .a { color: var(--ink-3); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctl { width: 40px; height: 40px; border-radius: 20px; -webkit-flex: none; flex: none; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; margin-left: 4px; -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring); }
+.ctl svg { width: 20px; height: 20px; }
+.ctl.play { background: var(--solid); color: var(--solid-ink); }
+.ctl.play svg { width: 18px; height: 18px; }
+.wline { height: 3px; border-radius: 2px; background: rgba(255,255,255,0.16); margin-top: 14px; overflow: hidden; }
+.wline i { display: block; height: 100%; background: rgba(255,255,255,0.85); }
+
+/* climate widget */
+.wc { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.wc-l { -webkit-flex: 1; flex: 1; min-width: 0; }
+.wc-t { font-family: var(--font-display); font-size: 38px; font-weight: 300; letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.wc-s { color: var(--ink-3); font-size: 13.5px; font-weight: 500; margin-top: 2px; }
+.wc-s.heating { color: var(--warn); }
+.wc-r { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+.wc-r .btn-round { width: 38px; height: 38px; }
+.wc-r .btn-round svg { width: 18px; height: 18px; }
+.wc-target { width: 58px; text-align: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* access widget */
+.wa { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 44px; }
+.wa + .wa { margin-top: 12px; }
+.wa .ai { width: 36px; height: 36px; border-radius: 18px; -webkit-flex: none; flex: none; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; background: rgba(255,255,255,0.12); margin-right: 12px; }
+.wa .ai svg { width: 19px; height: 19px; }
+.wa .ai.warn { background: rgba(255, 181, 71, 0.25); color: var(--warn); }
+.wa .tx { -webkit-flex: 1; flex: 1; min-width: 0; }
+.wa .tx b { display: block; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wa .tx span { display: block; color: var(--ink-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wa .hold { height: 34px; padding: 0 13px; border-radius: 17px; font-size: 13px; font-weight: 600; }
+
+/* scenes: one quiet row */
+.scn-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); grid-gap: 8px; gap: 8px; }
+.scn { display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; text-align: center; min-width: 0; -webkit-transition: -webkit-transform 0.28s var(--spring); transition: transform 0.28s var(--spring); }
+.scn .c { width: 58px; height: 58px; border-radius: 29px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; margin-bottom: 7px; -webkit-transition: background-color 0.2s, color 0.2s; transition: background-color 0.2s, color 0.2s; }
+.scn .c svg { width: 25px; height: 25px; }
+.scn span { font-size: 13px; font-weight: 500; color: var(--ink-2); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scn.is-active .c { background: var(--solid); color: var(--solid-ink); }
+.scn.is-active span { color: var(--ink); }
+
+/* room tabs */
+.tabs-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: -8px; padding-bottom: 8px; }
+.tabs { display: -webkit-inline-flex; display: inline-flex; padding: 4px; border-radius: 22px; }
+.tabs .tb { height: 36px; padding: 0 16px; border-radius: 18px; font-size: 14.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-transition: background-color 0.2s, color 0.2s; transition: background-color 0.2s, color 0.2s; }
+.tabs .tb.is-active { background: var(--solid); color: var(--solid-ink); }
+
+/* tiles: plain glass, no bars, no glow */
+.tiles { grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); grid-gap: 12px; gap: 12px; }
+.tile { height: 100px; padding: 13px 14px; border-radius: 22px; background: rgba(255,255,255,0.11); }
+.fx-full .tile { -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); }
+.fx-light .tile { background: rgba(20, 24, 40, 0.5); }
+.tile .ico { width: 34px; height: 34px; border-radius: 17px; background: none; color: var(--ink-2); }
+.tile .ico svg { width: 24px; height: 24px; }
+.tile .name { margin-top: 6px; }
+.tile.is-on .ico { background: var(--tint, var(--warm)); box-shadow: none; color: #2b1d00; }
+.tile.is-on.cool .ico { color: #fff; }
+.tile .bar { display: none; }
+@media (max-width: 480px) { .scn-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .hd-time { font-size: 42px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { -webkit-transition-duration: 0.01ms !important; transition-duration: 0.01ms !important; -webkit-animation-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+</style>
+
+<div id="wall"></div>
+<div id="wallDim"></div>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="hd-left" role="button" tabindex="0" data-act="standby" aria-label="Standby öffnen">
+      <div class="hd-time" id="topTime"></div>
+      <div class="hd-date" id="dateLine"></div>
+    </div>
+    <div class="top-right">
+      <div class="hd-weather" id="topWeather"></div>
+      <div class="glass btn-round" role="button" tabindex="0" data-act="settings" aria-label="Einstellungen"><span id="icoSet"></span></div>
+    </div>
+  </header>
+  <main class="main" id="main">
+    <div class="grid">
+      <div class="col col-left" id="colLeft"></div>
+      <div class="col col-right" id="colRight"></div>
+    </div>
+  </main>
+</div>
+
+<div id="saver" hidden data-act="wake">
+  <div class="saver-in">
+    <div class="clock-wrap">
+      <div class="clock" id="sClock"></div>
+      <div class="s-date" id="sDate"></div>
+    </div>
+    <div class="s-widgets" id="sWidgets"></div>
+  </div>
+  <div class="saver-hint">Tippen zum Öffnen</div>
+</div>
+
+<div id="black" hidden data-act="wake"></div>
+
+<div id="sheetWrap" hidden>
+  <div class="sheet-bg" data-act="closeSheet"></div>
+  <div class="sheet glass" id="sheet" role="dialog" aria-modal="true"></div>
+</div>
+<div id="toast" class="glass"></div>
+<input type="file" id="wpFile" accept="image/*" hidden>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ================= helpers ================= */
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function num(v, d) { if (v == null || isNaN(v)) return '–'; return Number(v).toFixed(d == null ? 0 : d).replace('.', ','); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function dom(id) { return id.split('.')[0]; }
+  function attr(e, k, d) { return e && e.attributes && e.attributes[k] != null ? e.attributes[k] : d; }
+  function now() { return Date.now(); }
+
+  var DAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+  var DAYS_S = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  var MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+  /* ================= icons ================= */
+  var CLOUD = 'M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.4 1.5A3.3 3.3 0 0 0 7 18z';
+  var CLOUD_UP = 'M7 15h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.4 1.5A3.3 3.3 0 0 0 7 15z';
+  var NEXT = 'M3.5 6.3v11.4a.9.9 0 0 0 1.4.7l8.1-5.7v5a.9.9 0 0 0 1.4.7l8.1-5.7a.9.9 0 0 0 0-1.4l-8.1-5.7a.9.9 0 0 0-1.4.7v5L4.9 5.6a.9.9 0 0 0-1.4.7z';
+  var I = {
+    bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V17h5.2v-1.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+    ceiling: '<path d="M12 3v5M5 15a7 7 0 0 1 14 0zM10 18a2 2 0 0 0 4 0"/>',
+    strip: '<rect x="3" y="9" width="18" height="6" rx="3"/><path d="M7 12h.01M12 12h.01M17 12h.01"/>',
+    floor: '<path d="M8 3h8l2.5 7h-13L8 3zM12 10v10M8 21h8"/>',
+    spots: '<path d="M4 4h16M8 4v3M16 4v3"/><path d="M5 11a3 3 0 0 1 6 0zM13 11a3 3 0 0 1 6 0zM8 14v2M16 14v2"/>',
+    curtain: '<path d="M3 4h18M5 4v16c3 0 4.5-6 4.5-16M19 4v16c-3 0-4.5-6-4.5-16"/>',
+    curtainShut: '<path d="M3 4h18M5 4v16h14V4M9.5 4v16M14.5 4v16"/>',
+    power: '<path d="M12 3v8M7.5 6.5a7 7 0 1 0 9 0"/>',
+    coffee: '<path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8.5 3.5v3M12.5 3.5v3"/>',
+    lantern: '<path d="M9 3.5h6M10 3.5V6h4V3.5M8 6h8l-1.2 12H9.2L8 6zM12 18v3"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3M12 15v2"/>',
+    unlock: '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 7.8-1.3M12 15v2"/>',
+    door: '<path d="M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M4 21h16M14.5 12h.01"/>',
+    thermo: '<path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0zM12 11v6"/>',
+    flame: '<path d="M12 21a6 6 0 0 0 6-6c0-4-3-6-4-10-2 2-3 4-3 6-1-1-1.5-2-1.5-3C7 10 6 12.5 6 15a6 6 0 0 0 6 6z"/>',
+    drop: '<path d="M12 3.5s6 6.3 6 10.8a6 6 0 0 1-12 0c0-4.5 6-10.8 6-10.8z"/>',
+    speaker: '<rect x="6" y="3" width="12" height="18" rx="3"/><circle cx="12" cy="14" r="3"/><path d="M12 7h.01"/>',
+    vol: '<path d="M4 9.5h3l5-4v13l-5-4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/>',
+    volLow: '<path d="M4 9.5h3l5-4v13l-5-4H4zM16 9a4 4 0 0 1 0 6"/>',
+    play: '<path d="M8 5.6v12.8a1 1 0 0 0 1.5.9l10.2-6.4a1 1 0 0 0 0-1.8L9.5 4.7A1 1 0 0 0 8 5.6z" fill="currentColor" stroke="none"/>',
+    pause: '<rect x="6.5" y="5" width="4" height="14" rx="1.3" fill="currentColor" stroke="none"/><rect x="13.5" y="5" width="4" height="14" rx="1.3" fill="currentColor" stroke="none"/>',
+    next: '<path d="' + NEXT + '" fill="currentColor" stroke="none"/>',
+    prev: '<path d="' + NEXT + '" fill="currentColor" stroke="none" transform="matrix(-1 0 0 1 24 0)"/>',
+    music: '<path d="M9 18V6l11-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zM20 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3z"/>',
+    sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>',
+    moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+    cloud: '<path d="' + CLOUD + '"/>',
+    partly: '<path d="M8.5 3v1.5M3 8.5h1.5M4.6 4.6l1 1M12.4 4.6l-1 1"/><path d="M5.3 11a3.6 3.6 0 0 1 6.5-3"/><path d="M9.5 20h7.5a3.5 3.5 0 0 0 .4-7 5 5 0 0 0-9.6 1.3A2.9 2.9 0 0 0 9.5 20z"/>',
+    rain: '<path d="' + CLOUD_UP + '"/><path d="M8 21l1-3M12 21l1-3M16 21l1-3"/>',
+    snow: '<path d="' + CLOUD_UP + '"/><path d="M8 19h.01M12 21h.01M16 19h.01M10 18h.01M14 18h.01" stroke-width="2.6"/>',
+    fog: '<path d="M4 9h16M4 13h16M7 17h10"/>',
+    bolt: '<path d="' + CLOUD_UP + '"/><path d="M12.5 15l-2 3.5h3.5l-2 3.5"/>',
+    wind: '<path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7"/>',
+    calendar: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15L6 16zM10 21h4"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    sunrise: '<path d="M3 18h18M7 15a5 5 0 0 1 10 0M12 3v5M9.5 5.5L12 3l2.5 2.5M4.5 10l1.4 1.4M19.5 10l-1.4 1.4"/>',
+    film: '<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M8 6l-1.6 4M13 6l-1.6 4M18 6l-1.6 4"/>',
+    leave: '<path d="M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 16l4-4-4-4M14 12H4"/>',
+    bed: '<path d="M3 18V7M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11.5h.01"/>',
+    dine: '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 1.5-3 4-3 7v3h3"/>',
+    home: '<path d="M4 11l8-7 8 7M6 9.5V20h12V9.5"/>',
+    camera: '<rect x="3" y="6" width="13" height="12" rx="3"/><path d="M16 10l5-3v10l-5-3"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    bulbs: '<path d="M12 3v2M5.6 5.6L7 7M3 12h2M19 12h2M17 7l1.4-1.4"/><path d="M9.5 18h5M10.5 21h3M12 8a4 4 0 0 0-2.4 7.2c.4.3.6.8.6 1.3v.5h3.6v-.5c0-.5.2-1 .6-1.3A4 4 0 0 0 12 8z"/>'
+  };
+  function ico(n, extra) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + (I[n] || I.home) + '</svg>';
+  }
+  var WX = { sunny: 'sun', 'clear-night': 'moon', partlycloudy: 'partly', cloudy: 'cloud', rainy: 'rain', pouring: 'rain', snowy: 'snow', 'snowy-rainy': 'snow', fog: 'fog', lightning: 'bolt', 'lightning-rainy': 'bolt', windy: 'wind', 'windy-variant': 'wind', hail: 'snow', exceptional: 'cloud' };
+  var WX_DE = { sunny: 'Sonnig', 'clear-night': 'Klar', partlycloudy: 'Leicht bewölkt', cloudy: 'Bewölkt', rainy: 'Regen', pouring: 'Starkregen', snowy: 'Schnee', 'snowy-rainy': 'Schneeregen', fog: 'Nebel', lightning: 'Gewitter', 'lightning-rainy': 'Gewitter', windy: 'Windig', 'windy-variant': 'Windig', hail: 'Hagel', exceptional: 'Unwetter' };
+
+  /* ================= wallpapers ================= */
+  var WALLS = {
+    aurora: { name: 'Aurora', css: 'radial-gradient(60% 70% at 15% 20%, #3f6ff2 0%, rgba(63,111,242,0) 70%), radial-gradient(55% 60% at 85% 25%, #c24fd6 0%, rgba(194,79,214,0) 70%), radial-gradient(70% 60% at 55% 100%, #19b3a3 0%, rgba(25,179,163,0) 70%), linear-gradient(160deg, #101a3d, #0a0f24)' },
+    abend: { name: 'Abend', css: 'radial-gradient(60% 70% at 20% 15%, #ff8a5c 0%, rgba(255,138,92,0) 70%), radial-gradient(60% 70% at 85% 40%, #b62e6c 0%, rgba(182,46,108,0) 70%), radial-gradient(70% 60% at 40% 100%, #43218a 0%, rgba(67,33,138,0) 70%), linear-gradient(160deg, #2a1030, #12081f)' },
+    tiefsee: { name: 'Tiefsee', css: 'radial-gradient(60% 70% at 25% 25%, #1592b5 0%, rgba(21,146,181,0) 70%), radial-gradient(60% 60% at 85% 70%, #2449a8 0%, rgba(36,73,168,0) 70%), radial-gradient(50% 50% at 70% 10%, #46c9b5 0%, rgba(70,201,181,0) 70%), linear-gradient(160deg, #04202d, #030b16)' },
+    morgen: { name: 'Morgen', css: 'radial-gradient(60% 70% at 20% 20%, #f7c56b 0%, rgba(247,197,107,0) 70%), radial-gradient(60% 70% at 85% 30%, #ec7f73 0%, rgba(236,127,115,0) 70%), radial-gradient(70% 60% at 55% 100%, #6f9fe6 0%, rgba(111,159,230,0) 70%), linear-gradient(160deg, #3a3550, #1f2338)' },
+    wald: { name: 'Wald', css: 'radial-gradient(60% 70% at 20% 25%, #3aa66b 0%, rgba(58,166,107,0) 70%), radial-gradient(60% 70% at 80% 70%, #1e6f72 0%, rgba(30,111,114,0) 70%), radial-gradient(50% 50% at 75% 15%, #c7d36a 0%, rgba(199,211,106,0) 65%), linear-gradient(160deg, #0d2219, #06120e)' }
+  };
+
+  /* ================= settings / storage ================= */
+  function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+  function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  var oldIOS = /(iPad|iPhone|iPod).*OS (9|10|11|12)_/.test(navigator.userAgent);
+  var DEF = {
+    mode: 'demo', haUrl: '', haToken: '',
+    wallpaper: 'aurora', dim: 25, fx: oldIOS ? 'balanced' : 'full',
+    saverAfter: 90, nightDim: true, clockStyle: 'thin',
+    widgets: { date: true, weather: true, calendar: true, music: true, climate: true },
+    cards: { scenes: true, media: true, climate: true, access: true },
+    room: 'all', media: null, motion: '', blackAfter: 0
+  };
+  var S = Object.assign({}, DEF, load('hub.settings', {}));
+  S.widgets = Object.assign({}, DEF.widgets, S.widgets || {});
+  S.cards = Object.assign({}, DEF.cards, S.cards || {});
+  var customWall = null;
+  try { customWall = localStorage.getItem('hub.wallpaper'); } catch (e) { customWall = null; }
+  function save() { store('hub.settings', S); }
+
+  /* ================= model ================= */
+  var M = {
+    ents: {}, rooms: [], scenes: [], players: [], climate: null, lock: null, intercom: null, camera: null,
+    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: []
+  };
+  var hub = null;
+
+  /* ================= demo hub ================= */
+  function mk(id, state, a) { return { entity_id: id, state: state, attributes: a || {}, last_changed: new Date().toISOString() }; }
+  var TRACKS = [
+    { t: 'Nachtfahrt', a: 'Lumen Club', al: 'Stadtlichter', d: 214, art: 'linear-gradient(135deg,#ff6a88,#6a5cff)' },
+    { t: 'Salz & Glas', a: 'Mira Okafor', al: 'Küstenlinie', d: 187, art: 'linear-gradient(135deg,#37d5c6,#1b4e9b)' },
+    { t: 'Langsamer Sonntag', a: 'Die Kerzen', al: 'Warmes Zimmer', d: 242, art: 'linear-gradient(135deg,#f9c46b,#e2554f)' },
+    { t: 'Polarlicht', a: 'Halden', al: 'Nordwärts', d: 201, art: 'linear-gradient(135deg,#7ef29d,#2b6cb0)' },
+    { t: 'Kaffee um sieben', a: 'Juno & Pfeil', al: 'Früh', d: 176, art: 'linear-gradient(135deg,#c79a6b,#4a2f27)' }
+  ];
+  var FAVS = ['Chill am Abend', 'Morgenradio', 'Fokus', 'Party Mix', 'Jazz Klassiker', 'Deutschrap Neu'];
+
+  function DemoHub() { this.trackIx = {}; }
+  DemoHub.prototype.start = function () {
+    var e = {};
+    function add(x) { e[x.entity_id] = x; }
+    add(mk('light.wohnzimmer_decke', 'on', { friendly_name: 'Deckenlicht', brightness: 204, color_mode: 'color_temp', color_temp_kelvin: 2700, supported_color_modes: ['color_temp', 'xy'], hub_icon: 'ceiling', hub_brand: 'Philips Hue' }));
+    add(mk('light.tv_lightstrip', 'on', { friendly_name: 'TV Lightstrip', brightness: 150, color_mode: 'xy', rgb_color: [150, 90, 255], supported_color_modes: ['color_temp', 'xy'], hub_icon: 'strip', hub_brand: 'Philips Hue' }));
+    add(mk('light.stehlampe', 'off', { friendly_name: 'Stehlampe', brightness: 180, color_temp_kelvin: 2700, supported_color_modes: ['color_temp'], hub_icon: 'floor', hub_brand: 'IKEA' }));
+    add(mk('cover.vorhang_wohnzimmer', 'open', { friendly_name: 'Vorhang', current_position: 100, hub_brand: 'SwitchBot' }));
+    add(mk('light.kueche_spots', 'on', { friendly_name: 'Spots', brightness: 255, color_temp_kelvin: 4000, supported_color_modes: ['color_temp'], hub_icon: 'spots', hub_brand: 'IKEA' }));
+    add(mk('light.kuecheninsel', 'off', { friendly_name: 'Kücheninsel', brightness: 200, color_temp_kelvin: 3000, supported_color_modes: ['color_temp', 'xy'], hub_icon: 'ceiling', hub_brand: 'Philips Hue' }));
+    add(mk('switch.kaffeemaschine', 'off', { friendly_name: 'Kaffeemaschine', hub_icon: 'coffee', hub_brand: 'SwitchBot Relais' }));
+    add(mk('light.nachttisch', 'off', { friendly_name: 'Nachttisch', brightness: 90, color_temp_kelvin: 2200, supported_color_modes: ['color_temp', 'xy'], hub_icon: 'bulb', hub_brand: 'Philips Hue' }));
+    add(mk('light.schlafzimmer_decke', 'off', { friendly_name: 'Deckenlicht', brightness: 255, color_temp_kelvin: 3000, supported_color_modes: ['color_temp'], hub_icon: 'ceiling', hub_brand: 'IKEA' }));
+    add(mk('cover.vorhang_schlafzimmer', 'closed', { friendly_name: 'Vorhang', current_position: 0, hub_brand: 'SwitchBot' }));
+    add(mk('light.flur', 'off', { friendly_name: 'Flurlicht', brightness: 220, color_temp_kelvin: 3000, supported_color_modes: ['color_temp'], hub_icon: 'ceiling', hub_brand: 'IKEA' }));
+    add(mk('switch.gartenlicht', 'off', { friendly_name: 'Gartenlicht', hub_icon: 'lantern', hub_brand: 'SwitchBot Relais' }));
+    add(mk('switch.terrassen_heizstrahler', 'off', { friendly_name: 'Heizstrahler', hub_icon: 'power', hub_brand: 'SwitchBot Relais' }));
+    add(mk('climate.wohnzimmer', 'heat', { friendly_name: 'Thermostat', current_temperature: 21.4, temperature: 22, current_humidity: 46, hvac_action: 'heating', hvac_modes: ['heat', 'auto', 'off'], min_temp: 5, max_temp: 30, target_temp_step: 0.5, hub_brand: 'Aqara' }));
+    add(mk('lock.haustuer', 'locked', { friendly_name: 'Haustür', hub_brand: 'Aqara' }));
+    add(mk('lock.ring_intercom', 'locked', { friendly_name: 'Haustür unten', hub_brand: 'Ring Intercom' }));
+    var pl = [['media_player.wohnzimmer', 'Wohnzimmer', 'Sonos Arc', 'playing', 0.32, 0], ['media_player.kueche', 'Küche', 'Sonos Era 100', 'paused', 0.2, 2], ['media_player.schlafzimmer', 'Schlafzimmer', 'Sonos One', 'idle', 0.15, 3]];
+    var self = this;
+    pl.forEach(function (p) {
+      var tr = TRACKS[p[5]];
+      self.trackIx[p[0]] = p[5];
+      add(mk(p[0], p[3], {
+        friendly_name: p[1], hub_model: p[2], volume_level: p[4], is_volume_muted: false,
+        media_title: p[3] === 'idle' ? null : tr.t, media_artist: p[3] === 'idle' ? null : tr.a, media_album_name: tr.al,
+        media_duration: tr.d, media_position: p[3] === 'playing' ? 63 : 41, media_position_updated_at: new Date().toISOString(),
+        source: 'Apple Music', source_list: FAVS.slice(), hub_art: tr.art, hub_brand: 'Sonos'
+      }));
+    });
+    add(mk('binary_sensor.bewegung_flur', 'off', { friendly_name: 'Bewegung Flur', device_class: 'motion', hub_brand: 'IKEA' }));
+    add(mk('weather.zuhause', 'partlycloudy', { friendly_name: 'Zuhause', temperature: 9, humidity: 71, wind_speed: 14 }));
+    var sc = [['scene.guten_morgen', 'Guten Morgen', 'sunrise'], ['scene.aus_dem_haus', 'Aus dem Haus', 'leave'], ['scene.essen', 'Essen', 'dine'], ['scene.film', 'Filmabend', 'film'], ['scene.gute_nacht', 'Gute Nacht', 'bed'], ['scene.alles_aus', 'Alles aus', 'power']];
+    sc.forEach(function (s) { add(mk(s[0], 'scening', { friendly_name: s[1], hub_icon: s[2] })); });
+    M.ents = e;
+    M.rooms = [
+      { id: 'wohnzimmer', name: 'Wohnzimmer', ids: ['light.wohnzimmer_decke', 'light.tv_lightstrip', 'light.stehlampe', 'cover.vorhang_wohnzimmer'] },
+      { id: 'kueche', name: 'Küche', ids: ['light.kueche_spots', 'light.kuecheninsel', 'switch.kaffeemaschine'] },
+      { id: 'schlafzimmer', name: 'Schlafzimmer', ids: ['light.nachttisch', 'light.schlafzimmer_decke', 'cover.vorhang_schlafzimmer'] },
+      { id: 'flur', name: 'Flur', ids: ['light.flur'] },
+      { id: 'aussen', name: 'Außen', ids: ['switch.gartenlicht', 'switch.terrassen_heizstrahler'] }
+    ];
+    M.scenes = sc.map(function (s) { return s[0]; });
+    M.players = pl.map(function (p) { return p[0]; });
+    M.climate = 'climate.wohnzimmer'; M.lock = 'lock.haustuer'; M.intercom = 'lock.ring_intercom'; M.camera = null;
+    M.weather = 'weather.zuhause';
+    M.motions = ['binary_sensor.bewegung_flur'];
+    M.lastRing = new Date(Date.now() - 1000 * 60 * 47);
+    var d = new Date();
+    var conds = ['partlycloudy', 'rainy', 'cloudy', 'sunny', 'sunny', 'partlycloudy', 'rainy'];
+    M.forecast = [];
+    for (var i = 0; i < 6; i++) {
+      var dd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i, 12);
+      M.forecast.push({ datetime: dd.toISOString(), condition: conds[i], temperature: [11, 8, 9, 13, 14, 12][i], templow: [4, 3, 5, 6, 7, 5][i] });
+    }
+    function at(dayOff, h, m) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + dayOff, h, m); }
+    M.events = [
+      { title: 'Zahnarzt', start: at(0, 15, 30), cal: '#ff9f6b' },
+      { title: 'Training', start: at(0, 18, 45), cal: '#6bc4ff' },
+      { title: 'Abendessen mit Lea', start: at(0, 20, 0), cal: '#ffc65c' },
+      { title: 'Müll rausstellen', start: at(1, 7, 0), cal: '#7ee29d' },
+      { title: 'Team-Meeting', start: at(1, 10, 0), cal: '#c79bff' },
+      { title: 'Paket abholen', start: at(2, 12, 0), allDay: true, cal: '#ff9f6b' }
+    ].filter(function (ev) { return ev.allDay || ev.start.getTime() > Date.now() - 30 * 60000; });
+    onConn('demo', 'Demo-Modus mit Beispielgeräten');
+    renderAll();
+    var me = this;
+    setInterval(function () { me.tickMedia(); }, 1000);
+  };
+  DemoHub.prototype.tickMedia = function () {
+    var me = this;
+    M.players.forEach(function (id) {
+      var e = M.ents[id];
+      if (e.state !== 'playing') return;
+      if (mediaPos(e) >= attr(e, 'media_duration', 0)) me.skip(id, 1);
+    });
+  };
+  DemoHub.prototype.set = function (id, state, a) {
+    var e = M.ents[id]; if (!e) return;
+    var n = { entity_id: id, state: state == null ? e.state : state, attributes: Object.assign({}, e.attributes, a || {}), last_changed: new Date().toISOString() };
+    M.ents[id] = n;
+    changed([id]);
+  };
+  DemoHub.prototype.skip = function (id, dir) {
+    var ix = (this.trackIx[id] + dir + TRACKS.length) % TRACKS.length;
+    this.trackIx[id] = ix;
+    var tr = TRACKS[ix];
+    var e = M.ents[id];
+    this.set(id, e.state === 'idle' ? 'playing' : e.state, { media_title: tr.t, media_artist: tr.a, media_album_name: tr.al, media_duration: tr.d, media_position: 0, media_position_updated_at: new Date().toISOString(), hub_art: tr.art });
+  };
+  DemoHub.prototype.call = function (domain, service, data, id) {
+    var me = this, e = M.ents[id], a = data || {};
+    if (domain === 'scene') { return this.scene(id); }
+    if (domain === 'light') {
+      if (service === 'turn_off') return this.set(id, 'off');
+      if (service === 'toggle') return this.set(id, e.state === 'on' ? 'off' : 'on');
+      var u = {};
+      if (a.brightness_pct != null) u.brightness = Math.round(a.brightness_pct * 2.55);
+      if (a.color_temp_kelvin) { u.color_temp_kelvin = a.color_temp_kelvin; u.color_mode = 'color_temp'; u.rgb_color = null; }
+      if (a.rgb_color) { u.rgb_color = a.rgb_color; u.color_mode = 'xy'; }
+      return this.set(id, a.brightness_pct === 0 ? 'off' : 'on', u);
+    }
+    if (domain === 'switch') {
+      if (service === 'toggle') return this.set(id, e.state === 'on' ? 'off' : 'on');
+      return this.set(id, service === 'turn_on' ? 'on' : 'off');
+    }
+    if (domain === 'cover') {
+      var target = service === 'open_cover' ? 100 : service === 'close_cover' ? 0 : service === 'set_cover_position' ? a.position : null;
+      if (service === 'stop_cover') { clearInterval(this['mv_' + id]); return this.set(id, attr(M.ents[id], 'current_position', 0) > 0 ? 'open' : 'closed'); }
+      if (service === 'toggle') target = attr(e, 'current_position', 0) > 0 ? 0 : 100;
+      clearInterval(this['mv_' + id]);
+      var cur = attr(e, 'current_position', 0);
+      var step = target > cur ? 5 : -5;
+      if (target === cur) return;
+      this.set(id, step > 0 ? 'opening' : 'closing');
+      this['mv_' + id] = setInterval(function () {
+        var p = attr(M.ents[id], 'current_position', 0) + step;
+        if ((step > 0 && p >= target) || (step < 0 && p <= target)) { clearInterval(me['mv_' + id]); me.set(id, target > 0 ? 'open' : 'closed', { current_position: target }); }
+        else me.set(id, null, { current_position: p });
+      }, 120);
+      return;
+    }
+    if (domain === 'climate') {
+      if (service === 'set_temperature') { var t = a.temperature; return this.set(id, null, { temperature: t, hvac_action: e.state !== 'off' && t > attr(e, 'current_temperature', 20) ? 'heating' : 'idle' }); }
+      if (service === 'set_hvac_mode') return this.set(id, a.hvac_mode, { hvac_action: a.hvac_mode === 'off' ? 'off' : (attr(e, 'temperature', 20) > attr(e, 'current_temperature', 20) ? 'heating' : 'idle') });
+    }
+    if (domain === 'lock') {
+      if (service === 'lock') return this.set(id, 'locked');
+      if (service === 'unlock' || service === 'open') {
+        this.set(id, 'unlocked');
+        if (id === M.intercom) setTimeout(function () { me.set(id, 'locked'); }, 5000);
+        return;
+      }
+    }
+    if (domain === 'media_player') {
+      if (service === 'media_play_pause') { var playing = e.state === 'playing'; if (e.state === 'idle') return this.skip(id, 0); return this.set(id, playing ? 'paused' : 'playing', { media_position: mediaPos(e), media_position_updated_at: new Date().toISOString() }); }
+      if (service === 'media_next_track') return this.skip(id, 1);
+      if (service === 'media_previous_track') return this.skip(id, -1);
+      if (service === 'volume_set') return this.set(id, null, { volume_level: a.volume_level });
+      if (service === 'select_source') { this.trackIx[id] = (FAVS.indexOf(a.source) + 1) % TRACKS.length; this.skip(id, 0); return this.set(id, 'playing', { source: a.source }); }
+      if (service === 'media_pause') return this.set(id, 'paused', { media_position: mediaPos(e), media_position_updated_at: new Date().toISOString() });
+    }
+  };
+  DemoHub.prototype.scene = function (id) {
+    var me = this;
+    var L = function (i, on, b, k) { me.call('light', on ? 'turn_on' : 'turn_off', on ? { brightness_pct: b, color_temp_kelvin: k } : {}, i); };
+    var allLights = Object.keys(M.ents).filter(function (k) { return dom(k) === 'light'; });
+    var C = function (i, open) { me.call('cover', open ? 'open_cover' : 'close_cover', {}, i); };
+    switch (id) {
+      case 'scene.guten_morgen':
+        L('light.kueche_spots', true, 100, 4000); L('light.wohnzimmer_decke', true, 70, 3500); L('light.flur', true, 60, 3000);
+        C('cover.vorhang_wohnzimmer', true); C('cover.vorhang_schlafzimmer', true);
+        me.call('switch', 'turn_on', {}, 'switch.kaffeemaschine');
+        me.call('climate', 'set_temperature', { temperature: 21.5 }, M.climate);
+        me.call('media_player', 'select_source', { source: 'Morgenradio' }, 'media_player.kueche');
+        break;
+      case 'scene.aus_dem_haus':
+        allLights.forEach(function (i) { L(i, false); });
+        ['switch.kaffeemaschine', 'switch.gartenlicht', 'switch.terrassen_heizstrahler'].forEach(function (i) { me.call('switch', 'turn_off', {}, i); });
+        M.players.forEach(function (i) { me.call('media_player', 'media_pause', {}, i); });
+        me.call('climate', 'set_temperature', { temperature: 18 }, M.climate);
+        me.call('lock', 'lock', {}, M.lock);
+        break;
+      case 'scene.essen':
+        L('light.kuecheninsel', true, 80, 2700); L('light.kueche_spots', true, 40, 2700); L('light.wohnzimmer_decke', true, 35, 2400); L('light.stehlampe', true, 50, 2400);
+        me.call('media_player', 'select_source', { source: 'Jazz Klassiker' }, 'media_player.wohnzimmer');
+        break;
+      case 'scene.film':
+        allLights.forEach(function (i) { if (i !== 'light.tv_lightstrip') L(i, false); });
+        me.call('light', 'turn_on', { brightness_pct: 35, rgb_color: [110, 80, 255] }, 'light.tv_lightstrip');
+        C('cover.vorhang_wohnzimmer', false);
+        M.players.forEach(function (i) { me.call('media_player', 'media_pause', {}, i); });
+        break;
+      case 'scene.gute_nacht':
+        allLights.forEach(function (i) { if (i !== 'light.nachttisch') L(i, false); });
+        L('light.nachttisch', true, 15, 2200);
+        C('cover.vorhang_wohnzimmer', false); C('cover.vorhang_schlafzimmer', false);
+        M.players.forEach(function (i) { me.call('media_player', 'media_pause', {}, i); });
+        me.call('switch', 'turn_off', {}, 'switch.gartenlicht');
+        me.call('climate', 'set_temperature', { temperature: 18.5 }, M.climate);
+        me.call('lock', 'lock', {}, M.lock);
+        break;
+      case 'scene.alles_aus':
+        allLights.forEach(function (i) { L(i, false); });
+        ['switch.kaffeemaschine', 'switch.gartenlicht', 'switch.terrassen_heizstrahler'].forEach(function (i) { me.call('switch', 'turn_off', {}, i); });
+        M.players.forEach(function (i) { me.call('media_player', 'media_pause', {}, i); });
+        break;
+    }
+  };
+  DemoHub.prototype.stop = function () {};
+
+  /* ================= Home Assistant hub ================= */
+  function HAHub(url, token) {
+    this.url = url.replace(/\/+$/, ''); this.token = token; this.id = 1; this.pending = {}; this.reg = {}; this.backoff = 1000; this.dead = false;
+  }
+  HAHub.prototype.send = function (msg) {
+    var me = this;
+    return new Promise(function (res, rej) {
+      if (!me.ws || me.ws.readyState !== 1) return rej(new Error('Keine Verbindung'));
+      msg.id = me.id++;
+      me.pending[msg.id] = { res: res, rej: rej };
+      me.ws.send(JSON.stringify(msg));
+    });
+  };
+  HAHub.prototype.start = function () {
+    var me = this;
+    var wsUrl = this.url.replace(/^http/, 'ws') + '/api/websocket';
+    onConn('wait', 'Verbinde mit Home Assistant …');
+    try { this.ws = new WebSocket(wsUrl); } catch (e) { onConn('err', 'Adresse ungültig: ' + e.message); return; }
+    this.ws.onmessage = function (ev) {
+      var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.type === 'auth_required') me.ws.send(JSON.stringify({ type: 'auth', access_token: me.token }));
+      else if (m.type === 'auth_ok') { me.backoff = 1000; me.boot(); }
+      else if (m.type === 'auth_invalid') { me.dead = true; onConn('err', 'Token abgelehnt. Erstelle in Home Assistant unter Profil › Sicherheit einen neuen langlebigen Token.'); }
+      else if (m.type === 'result') { var p = me.pending[m.id]; if (p) { delete me.pending[m.id]; if (m.success) p.res(m.result); else p.rej(new Error((m.error && m.error.message) || 'Fehler')); } }
+      else if (m.type === 'event') me.onEvent(m.event);
+    };
+    this.ws.onclose = function () {
+      if (me.dead) return;
+      onConn('err', 'Verbindung getrennt. Neuer Versuch in ' + Math.round(me.backoff / 1000) + ' s …');
+      setTimeout(function () { if (!me.dead) me.start(); }, me.backoff);
+      me.backoff = Math.min(me.backoff * 2, 30000);
+    };
+    this.ws.onerror = function () {};
+  };
+  HAHub.prototype.stop = function () { this.dead = true; clearInterval(this.timer); try { this.ws.close(); } catch (e) {} };
+  HAHub.prototype.boot = function () {
+    var me = this;
+    Promise.all([
+      this.send({ type: 'get_states' }),
+      this.send({ type: 'config/area_registry/list' }).catch(function () { return []; }),
+      this.send({ type: 'config/device_registry/list' }).catch(function () { return []; }),
+      this.send({ type: 'config/entity_registry/list' }).catch(function () { return []; })
+    ]).then(function (r) {
+      var states = r[0], areas = r[1], devices = r[2], entReg = r[3];
+      var devArea = {}; devices.forEach(function (d) { devArea[d.id] = d.area_id; });
+      me.reg = {}; entReg.forEach(function (x) { me.reg[x.entity_id] = x; });
+      M.ents = {}; states.forEach(function (s) { M.ents[s.entity_id] = s; });
+      var areaName = {}; areas.forEach(function (a) { areaName[a.area_id] = a.name; });
+      var rooms = {}, order = areas.map(function (a) { return a.area_id; });
+      var visible = function (id) { var x = me.reg[id]; return !x || (!x.hidden_by && !x.disabled_by && !x.entity_category); };
+      var platform = function (id) { var x = me.reg[id]; return x ? x.platform : ''; };
+      M.motions = [];
+      M.scenes = []; M.players = []; M.climate = M.lock = M.intercom = M.camera = M.weather = null;
+      var cals = [];
+      states.forEach(function (s) {
+        var id = s.entity_id, d = dom(id);
+        if (!visible(id)) return;
+        if (d === 'light' || d === 'cover' || d === 'switch' || d === 'fan') {
+          var x = me.reg[id] || {}; var area = x.area_id || devArea[x.device_id] || '_other';
+          (rooms[area] = rooms[area] || []).push(id);
+        } else if (d === 'scene') M.scenes.push(id);
+        else if (d === 'media_player') M.players.push(id);
+        else if (d === 'climate' && !M.climate) M.climate = id;
+        else if (d === 'lock') { if (platform(id) === 'ring') M.intercom = M.intercom || id; else M.lock = M.lock || id; }
+        else if (d === 'camera' && platform(id) === 'ring' && !M.camera) M.camera = id;
+        else if (d === 'weather' && !M.weather) M.weather = id;
+        else if (d === 'calendar') cals.push(id);
+        else if (d === 'binary_sensor' && /^(motion|occupancy|presence)$/.test(attr(s, 'device_class', ''))) M.motions.push(id);
+      });
+      var sonos = M.players.filter(function (id) { return platform(id) === 'sonos'; });
+      if (sonos.length) M.players = sonos;
+      order.push('_other');
+      M.rooms = order.filter(function (a) { return rooms[a]; }).map(function (a) {
+        return { id: a, name: a === '_other' ? 'Weitere' : areaName[a], ids: rooms[a].sort(function (p, q) { return dom(p) === dom(q) ? 0 : dom(p) === 'light' ? -1 : 1; }) };
+      });
+      me.cals = cals;
+      onConn('ok', 'Verbunden mit Home Assistant · ' + Object.keys(M.ents).length + ' Entitäten');
+      renderAll();
+      me.send({ type: 'subscribe_events', event_type: 'state_changed' });
+      me.extras();
+      clearInterval(me.timer);
+      me.timer = setInterval(function () { me.extras(); }, 15 * 60000);
+    }).catch(function (e) { onConn('err', 'Laden fehlgeschlagen: ' + e.message); });
+  };
+  HAHub.prototype.extras = function () {
+    var me = this;
+    if (M.weather) {
+      this.send({ type: 'call_service', domain: 'weather', service: 'get_forecasts', service_data: { type: 'daily' }, target: { entity_id: M.weather }, return_response: true })
+        .then(function (r) { var f = r && r.response && r.response[M.weather]; M.forecast = (f && f.forecast) || []; renderWeather(); })
+        .catch(function () {});
+    }
+    if (this.cals && this.cals.length) {
+      var s = new Date(), e = new Date(Date.now() + 3 * 86400000);
+      Promise.all(this.cals.map(function (c, i) {
+        return fetch(me.url + '/api/calendars/' + c + '?start=' + encodeURIComponent(s.toISOString()) + '&end=' + encodeURIComponent(e.toISOString()), { headers: { Authorization: 'Bearer ' + me.token } })
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .then(function (list) {
+            var col = ['#ff9f6b', '#6bc4ff', '#7ee29d', '#c79bff', '#ffc65c'][i % 5];
+            return list.map(function (ev) {
+              var all = !ev.start.dateTime;
+              var st = all ? new Date(ev.start.date + 'T00:00:00') : new Date(ev.start.dateTime);
+              return { title: ev.summary, start: st, allDay: all, cal: col };
+            });
+          }).catch(function () { return []; });
+      })).then(function (lists) {
+        M.events = [].concat.apply([], lists).sort(function (a, b) { return a.start - b.start; });
+        renderSaver();
+      });
+    }
+  };
+  HAHub.prototype.onEvent = function (ev) {
+    if (!ev || ev.event_type !== 'state_changed') return;
+    var d = ev.data, id = d.entity_id;
+    if (d.new_state) M.ents[id] = d.new_state; else delete M.ents[id];
+    var x = this.reg[id];
+    if (dom(id) === 'event' && x && x.platform === 'ring' && d.old_state && d.new_state && d.old_state.state !== d.new_state.state) {
+      var t = attr(d.new_state, 'event_type', '');
+      if (t === 'ding' || /ding/.test(id)) { M.lastRing = new Date(); showDoorbell(); }
+    }
+    changed([id]);
+  };
+  HAHub.prototype.call = function (domain, service, data, id) {
+    var me = this;
+    return this.send({ type: 'call_service', domain: domain, service: service, service_data: data || {}, target: { entity_id: id } })
+      .catch(function (e) { toast('Fehler: ' + e.message); });
+  };
+  HAHub.prototype.pic = function (path) { return path ? (/^https?:/.test(path) ? path : this.url + path) : null; };
+
+  /* ================= derived helpers ================= */
+  function name(id) { var e = M.ents[id]; return attr(e, 'friendly_name', id.split('.')[1]); }
+  function isOn(id) {
+    var e = M.ents[id]; if (!e) return false;
+    var d = dom(id);
+    if (d === 'cover') return attr(e, 'current_position', e.state === 'open' ? 100 : 0) > 0 || e.state === 'opening';
+    return e.state === 'on';
+  }
+  function bri(e) { return Math.round(attr(e, 'brightness', 0) / 2.55); }
+  function kelvinRGB(k) {
+    if (k <= 2300) return [255, 166, 77];
+    if (k <= 2800) return [255, 190, 110];
+    if (k <= 3500) return [255, 212, 150];
+    if (k <= 4500) return [255, 232, 200];
+    return [225, 236, 255];
+  }
+  function lightRGB(e) {
+    var rgb = attr(e, 'rgb_color', null);
+    if (rgb && attr(e, 'color_mode', '') !== 'color_temp') return rgb;
+    var k = attr(e, 'color_temp_kelvin', null);
+    if (!k && attr(e, 'color_temp', null)) k = Math.round(1e6 / attr(e, 'color_temp'));
+    return kelvinRGB(k || 2700);
+  }
+  function rgbCss(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
+  function iconFor(id) {
+    var e = M.ents[id], d = dom(id), hi = attr(e, 'hub_icon', null);
+    if (d === 'cover') return isOn(id) ? 'curtain' : 'curtainShut';
+    if (hi) return hi;
+    var n = (name(id) || '').toLowerCase();
+    if (d === 'light') {
+      if (/strip|led|band/.test(n)) return 'strip';
+      if (/steh|floor/.test(n)) return 'floor';
+      if (/decke|ceiling|pendel/.test(n)) return 'ceiling';
+      if (/spot/.test(n)) return 'spots';
+      return 'bulb';
+    }
+    if (/kaffee|coffee/.test(n)) return 'coffee';
+    if (/garten|außen|aussen|terrasse/.test(n)) return 'lantern';
+    return 'power';
+  }
+  function sceneIcon(id) {
+    var hi = attr(M.ents[id], 'hub_icon', null); if (hi) return hi;
+    var n = name(id).toLowerCase();
+    if (/morgen|aufsteh|wach/.test(n)) return 'sunrise';
+    if (/film|kino|tv|movie/.test(n)) return 'film';
+    if (/nacht|schlaf|bett/.test(n)) return 'bed';
+    if (/essen|dinner|koch/.test(n)) return 'dine';
+    if (/weg|haus|verlass|abwesend/.test(n)) return 'leave';
+    if (/aus|off/.test(n)) return 'power';
+    return 'bulbs';
+  }
+  function stateText(id) {
+    var e = M.ents[id], d = dom(id);
+    if (!e) return 'Nicht erreichbar';
+    if (e.state === 'unavailable') return 'Nicht erreichbar';
+    if (d === 'light') return e.state === 'on' ? (attr(e, 'brightness', null) != null ? bri(e) + ' %' : 'An') : 'Aus';
+    if (d === 'cover') {
+      var p = attr(e, 'current_position', null);
+      if (e.state === 'opening') return 'Öffnet … ' + (p != null ? p + ' %' : '');
+      if (e.state === 'closing') return 'Schließt … ' + (p != null ? p + ' %' : '');
+      if (p == null) return e.state === 'open' ? 'Offen' : 'Geschlossen';
+      return p === 0 ? 'Geschlossen' : p === 100 ? 'Offen' : p + ' % offen';
+    }
+    return e.state === 'on' ? 'An' : 'Aus';
+  }
+  function mediaPos(e) {
+    var p = attr(e, 'media_position', 0) || 0;
+    if (e.state === 'playing' && attr(e, 'media_position_updated_at', null)) p += (Date.now() - new Date(attr(e, 'media_position_updated_at')).getTime()) / 1000;
+    return Math.min(p, attr(e, 'media_duration', p) || p);
+  }
+  function mmss(s) { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ':' + pad(s % 60); }
+  function activePlayer() {
+    if (S.media && M.ents[S.media] && M.players.indexOf(S.media) >= 0) return S.media;
+    var p = M.players.filter(function (id) { return M.ents[id] && M.ents[id].state === 'playing'; })[0];
+    return p || M.players[0] || null;
+  }
+  function artStyle(e) {
+    var pic = attr(e, 'entity_picture', null);
+    if (pic && hub && hub.pic) return 'background-image:url(\'' + esc(hub.pic(pic)) + '\')';
+    var g = attr(e, 'hub_art', null);
+    return g ? 'background-image:' + g : 'background:rgba(255,255,255,0.1)';
+  }
+
+  /* ================= rendering ================= */
+  function renderAll() { renderHeader(); renderLeft(); renderRight(); renderSaver(); }
+  function renderHeader() {
+    var d = new Date();
+    $('#topTime').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    renderStatus();
+    renderWeather();
+  }
+  function renderWeather() {
+    var w = M.ents[M.weather], el = $('#topWeather');
+    if (!w) el.hidden = true;
+    else { el.hidden = false; el.innerHTML = ico(WX[w.state] || 'cloud') + '<span>' + num(attr(w, 'temperature')) + '°</span>'; }
+    renderSaver();
+  }
+  function renderStatus() {
+    var d = new Date(), parts = [DAYS[d.getDay()] + ', ' + d.getDate() + '. ' + MONTHS[d.getMonth()]];
+    var on = Object.keys(M.ents).filter(function (k) { return dom(k) === 'light' && M.ents[k].state === 'on' && inRooms(k); }).length;
+    parts.push(on ? on + (on === 1 ? ' Licht an' : ' Lichter an') : 'Alle Lichter aus');
+    var lk = M.ents[M.lock];
+    if (lk && lk.state !== 'locked') parts.push(name(M.lock) + ' offen');
+    $('#dateLine').textContent = parts.join('  ·  ');
+  }
+  function inRooms(id) { return M.rooms.some(function (r) { return r.ids.indexOf(id) >= 0; }); }
+
+  function renderLeft() {
+    var h = '';
+    if (S.cards.media && M.players.length) h += '<section class="glass w" id="cardMedia"></section>';
+    if (S.cards.climate && M.climate) h += '<section class="glass w" id="cardClimate"></section>';
+    if (S.cards.access && (M.lock || M.intercom)) h += '<section class="glass w" id="cardAccess"></section>';
+    $('#colLeft').innerHTML = h;
+    $('#colLeft').hidden = !h;
+    $('.grid').style.gridTemplateColumns = h ? '' : 'minmax(0,1fr)';
+    renderMedia(); renderClimate(); renderAccess();
+  }
+  var mediaDrag = false;
+  function renderMedia() {
+    if (mediaDrag) return;
+    if (sheetKind === 'media') mediaSheet();
+    var el = $('#cardMedia'); if (!el) return;
+    var id = activePlayer(), e = M.ents[id];
+    if (!e) { el.innerHTML = ''; return; }
+    var playing = e.state === 'playing', idle = !attr(e, 'media_title', null);
+    var dur = attr(e, 'media_duration', 0), pos = mediaPos(e);
+    var h = '<div class="wm" role="button" tabindex="0" data-act="mediaSheet" aria-label="Musik öffnen">' +
+      '<div class="art" style="' + artStyle(e) + '">' + (idle ? ico('music') : '') + '</div>' +
+      '<div class="wm-t"><div class="t">' + esc(idle ? 'Keine Musik' : attr(e, 'media_title', '')) + '</div>' +
+      '<div class="a">' + esc(idle ? name(id) : (attr(e, 'media_artist', '') || '') + ' · ' + name(id)) + '</div></div>' +
+      '<button class="ctl play" data-act="media" data-arg="media_play_pause" aria-label="' + (playing ? 'Pause' : 'Abspielen') + '">' + ico(playing ? 'pause' : 'play') + '</button>' +
+      '<button class="ctl" data-act="media" data-arg="media_next_track" aria-label="Nächster Titel">' + ico('next') + '</button></div>';
+    if (!idle && dur) h += '<div class="wline"><i class="mprog" style="width:' + clamp(pos / dur * 100, 0, 100) + '%"></i></div>';
+    el.innerHTML = h;
+  }
+  function mediaSheet() {
+    var id = activePlayer(), e = M.ents[id]; if (!e) return;
+    var playing = e.state === 'playing', idle = !attr(e, 'media_title', null);
+    var vol = Math.round((attr(e, 'volume_level', 0) || 0) * 100);
+    var dur = attr(e, 'media_duration', 0), pos = mediaPos(e);
+    var h = sheetHead(name(id), [attr(e, 'hub_model', ''), attr(e, 'source', '')].filter(Boolean).join(' · '));
+    h += '<div class="media-top"><div class="art" style="' + artStyle(e) + '">' + (idle ? ico('music') : '') + '</div><div class="track">' +
+      '<div class="t">' + esc(idle ? 'Keine Musik' : attr(e, 'media_title', '')) + '</div>' +
+      '<div class="a">' + esc(idle ? 'Wähle einen Favoriten' : (attr(e, 'media_artist', '') || '')) + '</div></div></div>';
+    if (!idle && dur) h += '<div class="progress"><div class="line"><i class="mprog" style="width:' + clamp(pos / dur * 100, 0, 100) + '%"></i></div><div class="times"><span class="mpos">' + mmss(pos) + '</span><span>' + mmss(dur) + '</span></div></div>';
+    h += '<div class="transport"><button data-act="media" data-arg="media_previous_track" aria-label="Zurück">' + ico('prev') + '</button>' +
+      '<button class="play" data-act="media" data-arg="media_play_pause" aria-label="' + (playing ? 'Pause' : 'Abspielen') + '">' + ico(playing ? 'pause' : 'play') + '</button>' +
+      '<button data-act="media" data-arg="media_next_track" aria-label="Weiter">' + ico('next') + '</button></div>';
+    h += '<div class="vol">' + ico('volLow') + '<input type="range" id="volSlider" min="0" max="100" value="' + vol + '" style="--p:' + vol + '%" aria-label="Lautstärke">' + ico('vol') + '</div>';
+    if (M.players.length > 1) h += '<div class="favs-label">Lautsprecher</div><div class="speakers" style="margin-top:0">' + M.players.map(function (p) {
+      var pe = M.ents[p];
+      return '<div class="pill' + (p === id ? ' is-active' : '') + '" role="button" tabindex="0" data-act="pickPlayer" data-arg="' + esc(p) + '">' + (pe && pe.state === 'playing' ? '<i></i>' : '') + esc(name(p)) + '</div>';
+    }).join('') + '</div>';
+    var favs = attr(e, 'source_list', []) || [];
+    if (favs.length) h += '<div class="favs-label">Favoriten</div><div class="favs">' + favs.slice(0, 8).map(function (f) {
+      return '<div class="fav' + (f === attr(e, 'source', '') ? ' is-active' : '') + '" role="button" tabindex="0" data-act="fav" data-arg="' + esc(f) + '"><span>' + esc(f) + '</span></div>';
+    }).join('') + '</div>';
+    openSheet(h, 'media', null);
+  }
+  function tickProgress() {
+    var id = activePlayer(), e = M.ents[id];
+    if (!e || e.state !== 'playing') return;
+    var dur = attr(e, 'media_duration', 0), pos = mediaPos(e); if (!dur) return;
+    $$('.mprog').forEach(function (b) { b.style.width = clamp(pos / dur * 100, 0, 100) + '%'; });
+    $$('.mpos').forEach(function (p) { p.textContent = mmss(pos); });
+  }
+  function climateState(e) {
+    var heating = attr(e, 'hvac_action', '') === 'heating';
+    var t = e.state === 'off' ? 'Aus' : heating ? 'Heizt' : 'Hält Temperatur';
+    if (attr(e, 'current_humidity', null) != null) t += ' · ' + num(attr(e, 'current_humidity')) + ' %';
+    return '<div class="wc-s' + (heating ? ' heating' : '') + '">' + esc(t) + '</div>';
+  }
+  function renderClimate() {
+    if (sheetKind === 'climate') climateSheet();
+    var el = $('#cardClimate'); if (!el) return;
+    var e = M.ents[M.climate]; if (!e) { el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="wc"><div class="wc-l" role="button" tabindex="0" data-act="climateSheet"><div class="w-lbl">' + esc(roomOf(M.climate) || name(M.climate)) + '</div><div class="wc-t">' + num(attr(e, 'current_temperature'), 1) + '°</div>' + climateState(e) + '</div>' +
+      '<div class="wc-r"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="-1" aria-label="Kälter">' + ico('minus') + '</div>' +
+      '<div class="wc-target">' + (e.state === 'off' ? 'Aus' : num(attr(e, 'temperature'), 1) + '°') + '</div>' +
+      '<div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="1" aria-label="Wärmer">' + ico('plus') + '</div></div></div>';
+  }
+  function climateSheet() {
+    var e = M.ents[M.climate]; if (!e) return;
+    var modes = attr(e, 'hvac_modes', ['heat', 'off']) || [];
+    var labels = { heat: 'Heizen', auto: 'Auto', off: 'Aus', cool: 'Kühlen', heat_cool: 'Auto', eco: 'Eco' };
+    var h = sheetHead(name(M.climate), [roomOf(M.climate), attr(e, 'hub_brand', '')].filter(Boolean).join(' · '));
+    h += '<div class="climate"><div class="now"><div class="big-temp">' + num(attr(e, 'current_temperature'), 1) + '°</div>' + climateState(e) + '</div>' +
+      '<div class="target"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="1" aria-label="Wärmer">' + ico('plus') + '</div>' +
+      '<div class="val">' + (e.state === 'off' ? '–' : num(attr(e, 'temperature'), 1) + '°') + '</div>' +
+      '<div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="-1" aria-label="Kälter">' + ico('minus') + '</div></div></div>';
+    h += '<div class="seg" style="grid-template-columns:repeat(' + Math.min(modes.length, 4) + ',1fr)">' + modes.slice(0, 4).map(function (m) {
+      return '<button class="' + (e.state === m ? 'is-active' : '') + '" data-act="hvac" data-arg="' + esc(m) + '">' + esc(labels[m] || m) + '</button>';
+    }).join('') + '</div>';
+    openSheet(h, 'climate', null);
+  }
+  function ago(d) {
+    if (!d) return 'noch nie';
+    var m = Math.round((Date.now() - d.getTime()) / 60000);
+    if (m < 1) return 'gerade eben';
+    if (m < 60) return 'vor ' + m + ' Min.';
+    return 'um ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function renderAccess() {
+    var el = $('#cardAccess'); if (!el) return;
+    var h = '', lk = M.ents[M.lock], ic = M.ents[M.intercom];
+    if (lk) {
+      var locked = lk.state === 'locked';
+      h += '<div class="wa"><div class="ai' + (locked ? '' : ' warn') + '">' + ico(locked ? 'lock' : 'unlock') + '</div><div class="tx"><b>' + esc(name(M.lock)) + '</b><span>' + (locked ? 'Verriegelt' : 'Offen') + '</span></div>' +
+        (locked ? '<button class="hold ghost" data-hold="unlock" data-arg="' + esc(M.lock) + '"><span>Öffnen</span></button>' : '<button class="hold" data-act="lock" data-arg="' + esc(M.lock) + '"><span>Verriegeln</span></button>') + '</div>';
+    }
+    if (ic) {
+      var opening = ic.state === 'unlocked' || ic.state === 'open';
+      h += '<div class="wa"><div class="ai' + (opening ? ' warn' : '') + '">' + ico('bell') + '</div><div class="tx" role="button" tabindex="0" data-act="doorbell"><b>' + esc(name(M.intercom)) + '</b><span>' + (opening ? 'Tür wird geöffnet' : 'Geklingelt ' + ago(M.lastRing)) + '</span></div>' +
+        '<button class="hold ghost" data-hold="unlock" data-arg="' + esc(M.intercom) + '"><span>Summer</span></button></div>';
+    }
+    el.innerHTML = h;
+  }
+  function camStyle() {
+    var c = M.ents[M.camera];
+    if (c && hub && hub.pic && attr(c, 'entity_picture', null)) return 'background-image:url(\'' + esc(hub.pic(attr(c, 'entity_picture')) + '&t=' + Date.now()) + '\')';
+    return '';
+  }
+  function curRoom() { return M.rooms.filter(function (r) { return r.id === S.room; })[0] || M.rooms[0]; }
+  function renderRight() {
+    var h = '';
+    if (S.cards.scenes && M.scenes.length) {
+      h += '<div class="scn-row">' + M.scenes.map(function (id) {
+        return '<div class="scn' + (M.lastScene === id ? ' is-active' : '') + '" role="button" tabindex="0" data-act="scene" data-arg="' + esc(id) + '"><div class="c glass">' + ico(sceneIcon(id)) + '</div><span>' + esc(name(id)) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    var room = curRoom();
+    if (M.rooms.length > 1) {
+      h += '<div class="tabs-wrap"><div class="tabs glass">' + M.rooms.map(function (r) {
+        return '<div class="tb' + (r === room ? ' is-active' : '') + '" role="button" tabindex="0" data-act="room" data-arg="' + esc(r.id) + '">' + esc(r.name) + '</div>';
+      }).join('') + '</div></div>';
+    }
+    if (room) h += '<div class="tiles">' + room.ids.map(tile).join('') + '</div>';
+    else h += '<div class="glass w empty">Noch keine Geräte gefunden. Prüfe die Verbindung in den Einstellungen.</div>';
+    $('#colRight').innerHTML = h;
+  }
+  function tile(id) {
+    var e = M.ents[id], d = dom(id), on = isOn(id), style = '', cls = 'tile';
+    if (on && d === 'light') { var c = lightRGB(e); style = ' style="--tint:' + rgbCss(c) + '"'; if (c[0] < 200) cls += ' cool'; }
+    if (on && d === 'cover') style = ' style="--tint:#9fd3ff"';
+    if (on) cls += ' is-on';
+    return '<div class="' + cls + '"' + style + ' role="button" tabindex="0" data-ent="' + esc(id) + '" data-act="toggle" data-arg="' + esc(id) + '" data-long="detail" aria-label="' + esc(name(id)) + ', ' + esc(stateText(id)) + '">' +
+      '<span class="ico">' + ico(iconFor(id)) + '</span><span class="name">' + esc(name(id)) + '</span><span class="state">' + esc(stateText(id)) + '</span></div>';
+  }
+
+  /* ---------- screensaver ---------- */
+  function fmtEvTime(ev) {
+    var d = ev.start, t = new Date(), tm = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1);
+    var same = d.toDateString() === t.toDateString();
+    var day = same ? '' : d.toDateString() === tm.toDateString() ? 'Morgen' : DAYS_S[d.getDay()];
+    if (ev.allDay) return day || 'Heute';
+    return (day ? day + ' ' : '') + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function renderSaver() {
+    var box = $('#sWidgets'); if (!box) return;
+    var h = '', w = M.ents[M.weather];
+    if (S.widgets.weather && w) {
+      h += '<div class="glass sw"><div class="sw-weather">' + ico(WX[w.state] || 'cloud') + '<div><div class="tt">' + num(attr(w, 'temperature')) + '°</div><div class="cc">' + esc(WX_DE[w.state] || w.state) + (M.forecast[0] ? ' · H ' + num(M.forecast[0].temperature) + '° T ' + num(M.forecast[0].templow) + '°' : '') + '</div></div></div>';
+      if (M.forecast.length > 1) h += '<div class="fc">' + M.forecast.slice(1, 5).map(function (f) {
+        var d = new Date(f.datetime);
+        return '<div>' + DAYS_S[d.getDay()] + ico(WX[f.condition] || 'cloud') + num(f.temperature) + '° <span class="lo">' + num(f.templow) + '°</span></div>';
+      }).join('') + '</div>';
+      h += '</div>';
+    }
+    if (S.widgets.calendar) {
+      var evs = M.events.slice(0, 4);
+      h += '<div class="glass sw"><h4>Termine</h4>' + (evs.length ? evs.map(function (ev) {
+        return '<div class="ev"><span class="tm">' + esc(fmtEvTime(ev)) + '</span><span class="ti"><i class="cal" style="--c:' + esc(ev.cal) + '"></i>' + esc(ev.title) + '</span></div>';
+      }).join('') : '<div class="empty">Keine Termine in den nächsten Tagen</div>') + '</div>';
+    }
+    var pid = M.players.filter(function (id) { return M.ents[id] && M.ents[id].state === 'playing'; })[0];
+    if (S.widgets.music && pid) {
+      var pe = M.ents[pid];
+      h += '<div class="glass sw sw-music"><div class="art" style="' + artStyle(pe) + '"></div><div style="min-width:0"><div class="t">' + esc(attr(pe, 'media_title', '')) + '</div><div class="a">' + esc(attr(pe, 'media_artist', '')) + ' · ' + esc(name(pid)) + '</div></div></div>';
+    }
+    var cl = M.ents[M.climate];
+    if (S.widgets.climate && cl) {
+      h += '<div class="glass sw sw-clim"><div><small>Innen</small>' + num(attr(cl, 'current_temperature'), 1) + '°</div>' + (attr(cl, 'current_humidity', null) != null ? '<div><small>Luftfeuchte</small>' + num(attr(cl, 'current_humidity')) + ' %</div>' : '') + '<div><small>Ziel</small>' + (cl.state === 'off' ? 'Aus' : num(attr(cl, 'temperature'), 1) + '°') + '</div></div>';
+    }
+    box.innerHTML = h;
+    box.hidden = !h;
+    tickClock();
+  }
+  function tickClock() {
+    var d = new Date();
+    $('#sClock').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    $('#sDate').textContent = S.widgets.date ? DAYS[d.getDay()] + ', ' + d.getDate() + '. ' + MONTHS[d.getMonth()] : '';
+    var h = d.getHours();
+    $('#saver').classList.toggle('is-night', !!S.nightDim && (h >= 22 || h < 6));
+    document.body.classList.toggle('clock-bold', S.clockStyle === 'bold');
+  }
+
+  /* ================= updates ================= */
+  var dirty = {}, raf = null;
+  function changed(ids) {
+    ids.forEach(function (id) { dirty[id] = 1; });
+    if (!raf) raf = setTimeout(flush, 30);
+  }
+  function flush() {
+    raf = null;
+    var ids = Object.keys(dirty); dirty = {};
+    var doms = {};
+    ids.forEach(function (id) {
+      doms[dom(id)] = 1;
+      $$('[data-ent="' + id + '"]').forEach(function (el) {
+        var t = document.createElement('div'); t.innerHTML = tile(id);
+        el.parentNode.replaceChild(t.firstChild, el);
+      });
+      if (sheetFor === id) refreshSheet();
+      if (id === motionId() && M.ents[id] && M.ents[id].state === 'on') onMotion();
+    });
+    if (doms.media_player) renderMedia();
+    if (doms.climate) renderClimate();
+    if (doms.lock) renderAccess();
+    if (doms.weather) renderWeather();
+    renderStatus();
+    if (doms.media_player || doms.climate) renderSaver();
+  }
+
+  /* ================= sheets ================= */
+  var sheetFor = null, sheetKind = null;
+  function openSheet(html, kind, id, wide) {
+    sheetFor = id || null; sheetKind = kind;
+    var s = $('#sheet');
+    s.className = 'sheet glass' + (wide ? ' wide' : '');
+    s.innerHTML = html;
+    $('#sheetWrap').hidden = false;
+  }
+  function closeSheet() { $('#sheetWrap').hidden = true; sheetFor = null; sheetKind = null; clearTimeout(bellTimer); }
+  function sheetHead(title, sub) {
+    return '<div class="sheet-h"><div style="flex:1;min-width:0"><h2>' + esc(title) + '</h2>' + (sub ? '<p>' + esc(sub) + '</p>' : '') + '</div><div class="btn-round" role="button" tabindex="0" data-act="closeSheet" aria-label="Schließen">' + ico('close') + '</div></div>';
+  }
+  var vsDrag = false;
+  function refreshSheet() {
+    if (vsDrag) return;
+    if (sheetKind === 'light') lightSheet(sheetFor);
+    else if (sheetKind === 'cover') coverSheet(sheetFor);
+  }
+  function roomOf(id) { var r = M.rooms.filter(function (x) { return x.ids.indexOf(id) >= 0; })[0]; return r ? r.name : ''; }
+  function lightSheet(id) {
+    var e = M.ents[id], on = e.state === 'on', p = on ? bri(e) : 0, c = lightRGB(e);
+    var modes = attr(e, 'supported_color_modes', []) || [];
+    var hasCT = modes.some(function (m) { return m === 'color_temp'; });
+    var hasColor = modes.some(function (m) { return m === 'xy' || m === 'hs' || m === 'rgb' || m === 'rgbw' || m === 'rgbww'; });
+    var h = sheetHead(name(id), [roomOf(id), attr(e, 'hub_brand', '')].filter(Boolean).join(' · '));
+    h += '<div class="vs-wrap"><div class="vslider" id="vs" data-ent-s="' + esc(id) + '" data-kind="light" style="--tint:' + rgbCss(c) + '"><div class="fill" style="height:' + p + '%"></div><div class="lbl">' + (on ? p + ' %' : 'Aus') + '</div></div>';
+    if (hasCT || hasColor) {
+      h += '<div class="vs-side">';
+      if (hasCT) h += '<div class="side-lbl">Weißton</div><div class="swatches">' + [[2200, 'Kerze'], [2700, 'Warm'], [4000, 'Neutral'], [6000, 'Kalt']].map(function (k) {
+        var cur = attr(e, 'color_mode', '') === 'color_temp' && Math.abs((attr(e, 'color_temp_kelvin', 0) || 0) - k[0]) < 250;
+        return '<div class="sw-c' + (cur ? ' is-active' : '') + '" role="button" tabindex="0" aria-label="' + k[1] + '" data-act="ct" data-arg="' + k[0] + '" style="background:' + rgbCss(kelvinRGB(k[0])) + '"></div>';
+      }).join('') + '</div>';
+      if (hasColor) h += '<div class="side-lbl">Farbe</div><div class="swatches">' + [[255, 80, 60], [255, 150, 40], [255, 70, 160], [150, 90, 255], [60, 120, 255], [40, 200, 220], [60, 220, 120], [255, 220, 60]].map(function (rgb) {
+        return '<div class="sw-c" role="button" tabindex="0" aria-label="Farbe" data-act="rgb" data-arg="' + rgb.join(',') + '" style="background:' + rgbCss(rgb) + '"></div>';
+      }).join('') + '</div>';
+      h += '</div>';
+    }
+    h += '</div><div class="btn-row" style="grid-template-columns:1fr 1fr"><button class="btn' + (on ? '' : ' primary') + '" data-act="lightOn">Einschalten</button><button class="btn' + (on ? ' primary' : '') + '" data-act="lightOff">Ausschalten</button></div>';
+    openSheet(h, 'light', id);
+  }
+  function coverSheet(id) {
+    var e = M.ents[id], p = attr(e, 'current_position', isOn(id) ? 100 : 0);
+    var h = sheetHead(name(id), [roomOf(id), attr(e, 'hub_brand', ''), stateText(id)].filter(Boolean).join(' · '));
+    h += '<div class="vs-wrap"><div class="vslider" id="vs" data-ent-s="' + esc(id) + '" data-kind="cover" style="--tint:#cfe8ff"><div class="fill" style="height:' + p + '%"></div><div class="lbl">' + p + ' %</div></div></div>';
+    h += '<div class="btn-row"><button class="btn" data-act="cover" data-arg="open_cover">Öffnen</button><button class="btn" data-act="cover" data-arg="stop_cover">Stopp</button><button class="btn" data-act="cover" data-arg="close_cover">Schließen</button></div>';
+    openSheet(h, 'cover', id);
+  }
+
+  var bellTimer = null;
+  function showDoorbell() {
+    hideSaver(true);
+    var id = M.intercom || M.lock;
+    var h = sheetHead('Es klingelt', (M.intercom ? name(M.intercom) : 'Haustür') + ' · ' + pad(new Date().getHours()) + ':' + pad(new Date().getMinutes()));
+    h += '<div class="bell-cam" style="' + camStyle() + '">' + (M.camera ? '' : '<div class="door-sil"></div>') + '<span class="live"><i></i>' + (M.camera ? 'Kamera' : 'Kamera · Demo') + '</span></div>';
+    h += '<div class="bell-actions">' + (id ? '<button class="hold" data-hold="unlock" data-arg="' + esc(id) + '"><span>Halten: Tür öffnen</span></button>' : '') + '<button class="hold ghost" data-act="closeSheet"><span>Ignorieren</span></button></div>';
+    openSheet(h, 'bell', null, true);
+    clearTimeout(bellTimer);
+    bellTimer = setTimeout(closeSheet, 90000);
+  }
+
+  /* ---------- settings ---------- */
+  function settingsSheet() {
+    var h = sheetHead('Einstellungen', 'Gelten nur für dieses Gerät');
+    h += '<div class="set-sec"><h3>Hintergrund</h3><div class="wps">' + Object.keys(WALLS).map(function (k) {
+      return '<div class="wp' + (S.wallpaper === k ? ' is-active' : '') + '" role="button" tabindex="0" data-act="wall" data-arg="' + k + '" style="background-image:' + WALLS[k].css + '"><span>' + WALLS[k].name + '</span></div>';
+    }).join('') +
+      (customWall ? '<div class="wp' + (S.wallpaper === 'custom' ? ' is-active' : '') + '" role="button" tabindex="0" data-act="wall" data-arg="custom" style="background-image:url(\'' + customWall + '\')"><span>Eigenes</span></div>' : '') +
+      '<div class="wp add" role="button" tabindex="0" data-act="pickWall" aria-label="Eigenes Bild wählen">' + ico('image') + '</div></div>';
+    h += '<div class="row" style="margin-top:8px"><label for="dimSlider">Abdunkeln</label><input type="range" id="dimSlider" min="0" max="70" value="' + S.dim + '" style="--p:' + (S.dim / 70 * 100) + '%"></div>';
+    if (customWall) h += '<div class="row"><span class="rl">Eigenes Bild</span><button class="btn" style="height:36px;padding:0 14px" data-act="removeWall">Entfernen</button></div>';
+    h += '</div>';
+
+    h += '<div class="set-sec"><h3>Glaseffekt</h3><div class="row"><span class="rl">Stärke<small>„Sparsam“ läuft auf alten iPads am flüssigsten</small></span><div class="seg-s">' +
+      [['full', 'Voll'], ['balanced', 'Ausgewogen'], ['light', 'Sparsam']].map(function (o) { return '<button class="' + (S.fx === o[0] ? 'is-active' : '') + '" data-act="fx" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div></div>';
+
+    h += '<div class="set-sec"><h3>Dashboard</h3>' + [['scenes', 'Szenen'], ['media', 'Musik'], ['climate', 'Klima'], ['access', 'Eingang & Klingel']].map(function (o) {
+      return '<div class="row"><span class="rl">' + o[1] + '</span><div class="switch' + (S.cards[o[0]] ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + !!S.cards[o[0]] + '" data-act="card" data-arg="' + o[0] + '"></div></div>';
+    }).join('') + '</div>';
+
+    h += '<div class="set-sec"><h3>Standby</h3><div class="row"><span class="rl">Standby nach</span><div class="seg-s">' +
+      [[30, '30 s'], [90, '1,5 min'], [300, '5 min'], [0, 'Nie']].map(function (o) { return '<button class="' + (S.saverAfter === o[0] ? 'is-active' : '') + '" data-act="saverAfter" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="row"><span class="rl">Uhr</span><div class="seg-s">' + [['thin', 'Dünn'], ['bold', 'Fett']].map(function (o) { return '<button class="' + (S.clockStyle === o[0] ? 'is-active' : '') + '" data-act="clockStyle" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
+      [['date', 'Datum'], ['weather', 'Wetter'], ['calendar', 'Termine'], ['music', 'Musik'], ['climate', 'Raumklima']].map(function (o) {
+        return '<div class="row"><span class="rl">' + o[1] + '</span><div class="switch' + (S.widgets[o[0]] ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + !!S.widgets[o[0]] + '" data-act="widget" data-arg="' + o[0] + '"></div></div>';
+      }).join('') +
+      '<div class="row"><span class="rl">Nachts abdunkeln<small>22 bis 6 Uhr, rote Uhr</small></span><div class="switch' + (S.nightDim ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + !!S.nightDim + '" data-act="nightDim"></div></div></div>';
+
+    var mopts = [['', 'Keiner']].concat(M.motions.map(function (m) { return [m, name(m)]; }));
+    h += '<div class="set-sec"><h3>Bewegungsmelder</h3><div class="row"><span class="rl">Aufwecken durch<small>Bei Bewegung erscheint das Dashboard</small></span></div><div class="favs" style="margin-bottom:8px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">' + mopts.map(function (o) {
+      return '<div class="fav' + (motionId() === (o[0] || null) || (!o[0] && !motionId()) ? ' is-active' : '') + '" role="button" tabindex="0" data-act="motionPick" data-arg="' + esc(o[0]) + '"><span>' + esc(o[1]) + '</span></div>';
+    }).join('') + '</div>' + (M.motions.length ? '' : '<p class="note">Kein Bewegungsmelder in Home Assistant gefunden.</p>') +
+      '<div class="row"><span class="rl">Bildschirm schwarz<small>Wenn so lange niemand da war</small></span><div class="seg-s">' +
+      [[0, 'Nie'], [5, '5 min'], [15, '15 min'], [30, '30 min']].map(function (o) { return '<button class="' + (S.blackAfter === o[0] ? 'is-active' : '') + '" data-act="blackAfter" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
+      (S.mode === 'demo' && motionId() ? '<button class="btn" style="width:100%;margin-top:10px" data-act="motionTest">Bewegung testen</button>' : '') + '</div>';
+
+    h += '<div class="set-sec"><h3>Verbindung</h3><div class="row"><span class="rl">Quelle</span><div class="seg-s">' +
+      [['demo', 'Demo'], ['ha', 'Home Assistant']].map(function (o) { return '<button class="' + (S.mode === o[0] ? 'is-active' : '') + '" data-act="mode" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
+    if (S.mode === 'ha') {
+      h += '<label class="f-lbl" for="haUrl">Adresse</label><input class="field" id="haUrl" type="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://homeassistant.local:8123" value="' + esc(S.haUrl || defaultUrl()) + '">' +
+        '<label class="f-lbl" for="haToken">Langlebiger Zugriffstoken</label><input class="field" id="haToken" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Aus Home Assistant › Profil › Sicherheit" value="' + esc(S.haToken) + '">' +
+        '<button class="btn primary" style="width:100%;margin-top:12px" data-act="connect">Verbinden</button>';
+    }
+    h += '<div class="conn ' + connState + '" id="connMsg">' + esc(connMsg) + '</div>';
+    if (S.mode === 'demo') h += '<button class="btn" style="width:100%;margin-top:12px" data-act="doorbellTest">' + 'Klingeln testen' + '</button>';
+    h += '<p class="note">Einstellungen und eigenes Hintergrundbild werden nur auf diesem Gerät gespeichert.</p></div>';
+    openSheet(h, 'settings', null, true);
+  }
+  function defaultUrl() { return /^https?:$/.test(location.protocol) && !/claude|anthropic|usercontent/.test(location.host) ? location.origin : ''; }
+  var connState = '', connMsg = '';
+  function onConn(state, msg) {
+    connState = state === 'ok' || state === 'demo' ? 'ok' : state === 'err' ? 'err' : '';
+    connMsg = msg;
+    var el = $('#connMsg'); if (el) { el.className = 'conn ' + connState; el.textContent = msg; }
+    if (state === 'err' && S.mode === 'ha') toast(msg);
+  }
+  function startHub() {
+    if (hub) hub.stop();
+    M.lastScene = null;
+    if (S.mode === 'ha' && S.haUrl && S.haToken) { hub = new HAHub(S.haUrl, S.haToken); }
+    else { if (S.mode === 'ha') onConn('err', 'Bitte Adresse und Token eintragen.'); hub = new DemoHub(); if (S.mode === 'ha') { var keep = connMsg; hub.start(); onConn('err', keep); return; } }
+    hub.start();
+  }
+
+  /* ---------- wallpaper ---------- */
+  function applyLook() {
+    var w = $('#wall');
+    if (S.wallpaper === 'custom' && customWall) { w.style.backgroundImage = 'url("' + customWall + '")'; }
+    else { w.style.backgroundImage = (WALLS[S.wallpaper] || WALLS.aurora).css; }
+    $('#wallDim').style.opacity = S.dim / 100;
+    document.body.classList.remove('fx-full', 'fx-balanced', 'fx-light');
+    document.body.classList.add('fx-' + S.fx);
+  }
+  function exifOrientation(buf) {
+    try {
+      var v = new DataView(buf); if (v.getUint16(0) !== 0xFFD8) return 1;
+      var off = 2;
+      while (off < v.byteLength - 4) {
+        var mk = v.getUint16(off); off += 2;
+        if (mk === 0xFFE1) {
+          if (v.getUint32(off + 2) !== 0x45786966) return 1;
+          var t = off + 8, little = v.getUint16(t) === 0x4949;
+          var ifd = t + v.getUint32(t + 4, little), n = v.getUint16(ifd, little);
+          for (var i = 0; i < n; i++) { var en = ifd + 2 + i * 12; if (v.getUint16(en, little) === 0x0112) return v.getUint16(en + 8, little); }
+          return 1;
+        } else if ((mk & 0xFF00) !== 0xFF00) break;
+        else off += v.getUint16(off);
+      }
+    } catch (e) {}
+    return 1;
+  }
+  function handleWallFile(file) {
+    if (!file) return;
+    toast('Bild wird vorbereitet …');
+    var fr = new FileReader();
+    fr.onload = function () {
+      var orient = exifOrientation(fr.result);
+      var nativeExif = window.CSS && CSS.supports && CSS.supports('image-orientation', 'from-image');
+      if (nativeExif) orient = 1;
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var max = 1600, w = img.naturalWidth, h = img.naturalHeight, sc = Math.min(1, max / Math.max(w, h));
+        var cw = Math.round(w * sc), ch = Math.round(h * sc), swap = orient >= 5 && orient <= 8;
+        var cv = document.createElement('canvas'); cv.width = swap ? ch : cw; cv.height = swap ? cw : ch;
+        var x = cv.getContext('2d');
+        var T = { 2: [-1, 0, 0, 1, cw, 0], 3: [-1, 0, 0, -1, cw, ch], 4: [1, 0, 0, -1, 0, ch], 5: [0, 1, 1, 0, 0, 0], 6: [0, 1, -1, 0, ch, 0], 7: [0, -1, -1, 0, ch, cw], 8: [0, -1, 1, 0, 0, cw] }[orient];
+        if (T) x.transform(T[0], T[1], T[2], T[3], T[4], T[5]);
+        x.drawImage(img, 0, 0, cw, ch);
+        URL.revokeObjectURL(url);
+        var data = cv.toDataURL('image/jpeg', 0.82);
+        customWall = data; S.wallpaper = 'custom';
+        var ok = true; try { localStorage.setItem('hub.wallpaper', data); } catch (e) { ok = false; }
+        save(); applyLook(); settingsSheet();
+        toast(ok ? 'Hintergrund gespeichert' : 'Hintergrund aktiv, aber zu groß zum Speichern');
+      };
+      img.onerror = function () { toast('Dieses Bild kann nicht geöffnet werden'); };
+      img.src = url;
+    };
+    fr.readAsArrayBuffer(file);
+  }
+
+  /* ---------- toast ---------- */
+  var toastT = null;
+  function toast(msg) {
+    var t = $('#toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('show'); }, 2400);
+  }
+
+  /* ================= actions ================= */
+  function svc(domain, service, data, id) { if (hub && id) hub.call(domain, service, data, id); }
+  var A = {
+    toggle: function (id) {
+      var d = dom(id);
+      if (d === 'cover') return svc('cover', isOn(id) ? 'close_cover' : 'open_cover', {}, id);
+      svc(d === 'light' || d === 'switch' || d === 'fan' ? d : 'homeassistant', 'toggle', {}, id);
+    },
+    detail: function (id) { var d = dom(id); if (d === 'light') lightSheet(id); else if (d === 'cover') coverSheet(id); else A.toggle(id); },
+    scene: function (id) {
+      svc('scene', 'turn_on', {}, id); M.lastScene = id;
+      $$('.scn').forEach(function (el) { el.classList.toggle('is-active', el.getAttribute('data-arg') === id); });
+      toast('Szene „' + name(id) + '“ aktiviert');
+    },
+    room: function (r) { S.room = r; save(); renderRight(); },
+    roomOff: function (r) { var room = M.rooms.filter(function (x) { return x.id === r; })[0]; if (room) room.ids.forEach(function (id) { if (dom(id) === 'light' && isOn(id)) svc('light', 'turn_off', {}, id); }); },
+    lightsOff: function () {
+      var on = Object.keys(M.ents).filter(function (k) { return dom(k) === 'light' && M.ents[k].state === 'on' && inRooms(k); });
+      if (!on.length) return toast('Alle Lichter sind schon aus');
+      on.forEach(function (id) { svc('light', 'turn_off', {}, id); });
+      toast(on.length + (on.length === 1 ? ' Licht' : ' Lichter') + ' ausgeschaltet');
+    },
+    media: function (cmd) { svc('media_player', cmd, {}, activePlayer()); },
+    pickPlayer: function (id) { S.media = id; save(); renderMedia(); },
+    fav: function (f) { svc('media_player', 'select_source', { source: f }, activePlayer()); toast('Spielt „' + f + '“'); },
+    temp: function (dir) {
+      var e = M.ents[M.climate]; if (!e) return;
+      var step = attr(e, 'target_temp_step', 0.5) || 0.5;
+      var t = clamp((attr(e, 'temperature', 20) || 20) + step * Number(dir), attr(e, 'min_temp', 5), attr(e, 'max_temp', 30));
+      svc('climate', 'set_temperature', { temperature: t }, M.climate);
+    },
+    hvac: function (m) { svc('climate', 'set_hvac_mode', { hvac_mode: m }, M.climate); },
+    lock: function (id) { svc('lock', 'lock', {}, id); toast(name(id) + ' wird verriegelt'); },
+    unlock: function (id) { svc('lock', 'unlock', {}, id); toast(id === M.intercom ? 'Summer ausgelöst' : name(id) + ' wird geöffnet'); if (sheetKind === 'bell') setTimeout(closeSheet, 900); },
+    doorbell: function () { showDoorbell(); },
+    mediaSheet: function () { mediaSheet(); },
+    climateSheet: function () { climateSheet(); },
+    doorbellTest: function () { closeSheet(); M.lastRing = new Date(); renderAccess(); setTimeout(showDoorbell, 300); },
+    motionPick: function (v) { S.motion = v || 'none'; save(); settingsSheet(); },
+    blackAfter: function (v) { S.blackAfter = Number(v); save(); settingsSheet(); },
+    motionTest: function () {
+      var id = motionId(); closeSheet(); showSaver(); toast('Standby – in 3 Sekunden kommt Bewegung');
+      setTimeout(function () { if (hub.set) { hub.set(id, 'on'); setTimeout(function () { hub.set(id, 'off'); }, 8000); } }, 3000);
+    },
+    closeSheet: closeSheet,
+    settings: function () { settingsSheet(); },
+    standby: function () { showSaver(); },
+    wake: function () { hideBlack(); hideSaver(); },
+    scroll: function (k) { var el = $(k === 'climate' ? '#cardClimate' : '#cardAccess'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+    lightOn: function () { svc('light', 'turn_on', {}, sheetFor); },
+    lightOff: function () { svc('light', 'turn_off', {}, sheetFor); },
+    ct: function (k) { svc('light', 'turn_on', { color_temp_kelvin: Number(k) }, sheetFor); },
+    rgb: function (c) { svc('light', 'turn_on', { rgb_color: c.split(',').map(Number) }, sheetFor); },
+    cover: function (s) { svc('cover', s, {}, sheetFor); },
+    wall: function (k) { S.wallpaper = k; save(); applyLook(); settingsSheet(); },
+    pickWall: function () { $('#wpFile').click(); },
+    removeWall: function () { customWall = null; try { localStorage.removeItem('hub.wallpaper'); } catch (e) {} if (S.wallpaper === 'custom') S.wallpaper = 'aurora'; save(); applyLook(); settingsSheet(); },
+    fx: function (k) { S.fx = k; save(); applyLook(); settingsSheet(); },
+    card: function (k) { S.cards[k] = !S.cards[k]; save(); renderLeft(); renderRight(); settingsSheet(); },
+    widget: function (k) { S.widgets[k] = !S.widgets[k]; save(); renderSaver(); settingsSheet(); },
+    nightDim: function () { S.nightDim = !S.nightDim; save(); tickClock(); settingsSheet(); },
+    saverAfter: function (v) { S.saverAfter = Number(v); save(); settingsSheet(); },
+    clockStyle: function (v) { S.clockStyle = v; save(); tickClock(); settingsSheet(); },
+    mode: function (m) { S.mode = m; save(); if (m === 'demo') startHub(); else { connMsg = S.haToken ? connMsg : 'Trage Adresse und Token ein.'; connState = ''; } settingsSheet(); renderHeader(); },
+    connect: function () {
+      S.haUrl = ($('#haUrl').value || '').trim(); S.haToken = ($('#haToken').value || '').trim();
+      if (!/^https?:\/\//.test(S.haUrl)) { onConn('err', 'Adresse muss mit http:// oder https:// beginnen.'); return; }
+      if (!S.haToken) { onConn('err', 'Bitte einen Token eintragen.'); return; }
+      save(); startHub(); renderHeader();
+    }
+  };
+
+  /* ================= input: tap, long press, hold ================= */
+  var press = null, lastTouch = 0;
+  function pt(ev) { var t = ev.touches && ev.touches[0] ? ev.touches[0] : ev.changedTouches && ev.changedTouches[0] ? ev.changedTouches[0] : ev; return { x: t.clientX, y: t.clientY }; }
+  function startPress(ev) {
+    poke();
+    if (ev.type === 'mousedown') { if (Date.now() - lastTouch < 800 || ev.button !== 0) return; }
+    else lastTouch = Date.now();
+    if (ev.target.closest('#vs')) return vsStart(ev);
+    var el = ev.target.closest('[data-act],[data-hold]');
+    if (!el || el.tagName === 'INPUT') return;
+    var p = pt(ev);
+    press = { el: el, x: p.x, y: p.y, fired: false };
+    el.classList.add('pressed');
+    if (el.hasAttribute('data-hold')) {
+      el.classList.add('holding');
+      press.timer = setTimeout(function () { press.fired = true; el.classList.remove('holding'); el.classList.remove('pressed'); run(el.getAttribute('data-hold'), el.getAttribute('data-arg')); }, 900);
+    } else if (el.hasAttribute('data-long')) {
+      press.timer = setTimeout(function () { press.fired = true; el.classList.remove('pressed'); run(el.getAttribute('data-long'), el.getAttribute('data-arg')); }, 480);
+    }
+  }
+  function movePress(ev) {
+    if (vsDrag) return vsMove(ev);
+    if (!press) return;
+    var p = pt(ev);
+    if (Math.abs(p.x - press.x) > 10 || Math.abs(p.y - press.y) > 10) cancelPress();
+  }
+  function cancelPress() { if (!press) return; clearTimeout(press.timer); press.el.classList.remove('pressed'); press.el.classList.remove('holding'); press = null; }
+  function endPress(ev) {
+    if (vsDrag) return vsEnd(ev);
+    if (!press) return;
+    if (ev.type === 'mouseup' && Date.now() - lastTouch < 800) return;
+    var pr = press; press = null;
+    clearTimeout(pr.timer);
+    pr.el.classList.remove('pressed'); pr.el.classList.remove('holding');
+    if (ev.cancelable && ev.type === 'touchend') ev.preventDefault();
+    if (pr.fired) return;
+    if (pr.el.hasAttribute('data-hold')) { toast('Gedrückt halten zum Bestätigen'); return; }
+    run(pr.el.getAttribute('data-act'), pr.el.getAttribute('data-arg'));
+  }
+  function run(act, arg) { if (A[act]) A[act](arg); }
+  document.addEventListener('touchstart', startPress, { passive: true });
+  document.addEventListener('touchmove', movePress, { passive: false });
+  document.addEventListener('touchend', endPress, { passive: false });
+  document.addEventListener('touchcancel', cancelPress);
+  document.addEventListener('mousedown', startPress);
+  document.addEventListener('mousemove', movePress);
+  document.addEventListener('mouseup', endPress);
+  document.addEventListener('keydown', function (ev) {
+    poke();
+    if (ev.key === 'Escape') { if (!$('#sheetWrap').hidden) closeSheet(); else hideSaver(); return; }
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var el = document.activeElement && document.activeElement.closest ? document.activeElement.closest('[data-act],[data-hold]') : null;
+    if (!el || el.tagName === 'INPUT') return;
+    ev.preventDefault();
+    run(el.getAttribute('data-hold') || el.getAttribute('data-act'), el.getAttribute('data-arg'));
+  });
+
+  /* vertical slider (brightness / curtain position) */
+  var vsLast = 0, vsVal = 0;
+  function vsStart(ev) { vsDrag = true; vsMove(ev); }
+  function vsMove(ev) {
+    var vs = $('#vs'); if (!vs) return;
+    if (ev.cancelable) ev.preventDefault();
+    var r = vs.getBoundingClientRect(), p = pt(ev);
+    vsVal = Math.round(clamp((r.bottom - p.y) / r.height * 100, 0, 100));
+    vs.querySelector('.fill').style.height = vsVal + '%';
+    vs.querySelector('.lbl').textContent = vs.getAttribute('data-kind') === 'light' && vsVal === 0 ? 'Aus' : vsVal + ' %';
+    if (Date.now() - vsLast > 350) { vsLast = Date.now(); vsSend(); }
+  }
+  function vsEnd() { vsDrag = false; vsSend(); }
+  function vsSend() {
+    var vs = $('#vs'); if (!vs) return;
+    var id = vs.getAttribute('data-ent-s');
+    if (vs.getAttribute('data-kind') === 'light') { if (vsVal === 0) svc('light', 'turn_off', {}, id); else svc('light', 'turn_on', { brightness_pct: vsVal }, id); }
+    else svc('cover', 'set_cover_position', { position: vsVal }, id);
+  }
+
+  /* range inputs */
+  var volT = 0;
+  document.addEventListener('input', function (ev) {
+    var t = ev.target;
+    if (t.type === 'range') t.style.setProperty('--p', (t.value - t.min) / (t.max - t.min) * 100 + '%');
+    if (t.id === 'volSlider') {
+      mediaDrag = true;
+      if (Date.now() - volT > 250) { volT = Date.now(); svc('media_player', 'volume_set', { volume_level: t.value / 100 }, activePlayer()); }
+    }
+    if (t.id === 'dimSlider') { S.dim = Number(t.value); $('#wallDim').style.opacity = S.dim / 100; }
+  });
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (t.id === 'volSlider') { svc('media_player', 'volume_set', { volume_level: t.value / 100 }, activePlayer()); mediaDrag = false; setTimeout(renderMedia, 400); }
+    if (t.id === 'dimSlider') save();
+    if (t.id === 'wpFile') { handleWallFile(t.files && t.files[0]); t.value = ''; }
+  });
+  document.addEventListener('touchend', function () { if (mediaDrag) setTimeout(function () { mediaDrag = false; }, 500); }, { passive: true });
+
+  /* ================= standby ================= */
+  var lastPoke = Date.now(), saverOn = false;
+  function poke() { lastPoke = Date.now(); }
+  function showSaver() { closeSheet(); renderSaver(); $('#saver').hidden = false; $('#app').style.visibility = 'hidden'; saverOn = true; }
+  function motionId() {
+    if (S.motion === 'none') return null;
+    if (S.motion && M.ents[S.motion]) return S.motion;
+    return S.mode === 'demo' && M.motions[0] ? M.motions[0] : null;
+  }
+  function onMotion() { poke(); hideBlack(); if (saverOn) { hideSaver(true); toast('Willkommen zurück'); } }
+  function showBlack() { closeSheet(); $('#black').hidden = false; }
+  function hideBlack() { $('#black').hidden = true; }
+  function hideSaver(silent) {
+    hideBlack();
+    if (!saverOn) return;
+    $('#saver').hidden = true; $('#app').style.visibility = ''; saverOn = false; poke();
+    if (!silent) { cancelPress(); }
+  }
+  setInterval(function () {
+    var mid = motionId();
+    if (mid && M.ents[mid] && M.ents[mid].state === 'on') poke();
+    if (!saverOn && S.saverAfter && Date.now() - lastPoke > S.saverAfter * 1000 && $('#sheetWrap').hidden) showSaver();
+    if (S.blackAfter && $('#black').hidden && Date.now() - lastPoke > S.blackAfter * 60000) { if (!saverOn) showSaver(); showBlack(); }
+  }, 3000);
+
+  /* ================= clocks ================= */
+  var lastMin = -1;
+  setInterval(function () {
+    var m = new Date().getMinutes();
+    if (m !== lastMin) { lastMin = m; renderHeader(); tickClock(); if (M.intercom) renderAccess(); }
+    tickProgress();
+  }, 1000);
+
+  /* ================= boot ================= */
+  $('#icoSet').innerHTML = ico('sliders');
+  applyLook();
+  startHub();
+})();
+</script>
+</body>
+</html>
