@@ -1643,7 +1643,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     }
     h += '<div class="conn ' + connState + '" id="connMsg">' + esc(connMsg) + '</div>';
     if (S.mode === 'demo') h += '<button class="btn" style="width:100%;margin-top:12px" data-act="doorbellTest">' + 'Klingeln testen' + '</button>';
-    h += '<p class="note">Einstellungen und eigenes Hintergrundbild werden nur auf diesem Gerät gespeichert.</p></div>';
+    h += '<p class="note">Einstellungen und eigenes Hintergrundbild werden nur auf diesem Gerät gespeichert.<br>Version __BUILD__</p></div>';
     openSheet(h, 'settings', null, true);
   }
   function defaultUrl() { return /^https?:$/.test(location.protocol) && !/claude|anthropic|usercontent/.test(location.host) ? location.origin : ''; }

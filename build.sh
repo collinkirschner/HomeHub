@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
     '<meta name="apple-mobile-web-app-title" content="Zuhause">' \
     '<meta name="theme-color" content="#0b1020">' \
     '</head>' '<body>'
-  cat src/hub.html
+  sed "s/__BUILD__/$(date -u +%Y-%m-%d\ %H:%M)/" src/hub.html
   printf '%s\n' '</body>' '</html>'
 } > index.html
 echo "index.html written ($(wc -c < index.html) bytes)"
