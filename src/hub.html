@@ -570,6 +570,8 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 (function () {
   'use strict';
 
+  var BUILD = '__BUILD__';
+
   /* ================= helpers ================= */
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
@@ -1643,7 +1645,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     }
     h += '<div class="conn ' + connState + '" id="connMsg">' + esc(connMsg) + '</div>';
     if (S.mode === 'demo') h += '<button class="btn" style="width:100%;margin-top:12px" data-act="doorbellTest">' + 'Klingeln testen' + '</button>';
-    h += '<p class="note">Einstellungen und eigenes Hintergrundbild werden nur auf diesem Gerät gespeichert.<br>Version __BUILD__</p></div>';
+    h += '<p class="note">Einstellungen und eigenes Hintergrundbild werden nur auf diesem Gerät gespeichert.<br>Version ' + BUILD + '</p></div>';
     openSheet(h, 'settings', null, true);
   }
   function defaultUrl() { return /^https?:$/.test(location.protocol) && !/claude|anthropic|usercontent/.test(location.host) ? location.origin : ''; }
@@ -1954,6 +1956,22 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (m !== lastMin) { lastMin = m; renderHeader(); tickClock(); if (M.intercom) renderAccess(); }
     tickProgress();
   }, 1000);
+
+  /* ================= self update ================= */
+  // When served from Home Assistant (/local/homehub/), check hourly whether a newer
+  // app.html was installed and reload when nobody is using the screen.
+  if (/\/local\/homehub\//.test(location.pathname) && BUILD.indexOf('__') !== 0) {
+    setInterval(function () {
+      if (!$('#sheetWrap').hidden || Date.now() - lastPoke < 60000) return;
+      var x = new XMLHttpRequest();
+      x.open('GET', 'app.html?t=' + Date.now(), true);
+      x.onload = function () {
+        var m = x.status === 200 && /var BUILD = '([^']+)'/.exec(x.responseText);
+        if (m && m[1] !== BUILD) location.reload();
+      };
+      x.send();
+    }, 60 * 60000);
+  }
 
   /* ================= boot ================= */
   $('#icoSet').innerHTML = ico('sliders');

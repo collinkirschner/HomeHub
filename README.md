@@ -7,14 +7,24 @@ und zeigt im Standby Uhr, Wetter und Termine.
 ## Dateien
 
 - `src/hub.html` – Quellcode (HTML, CSS und JavaScript in einer Datei)
-- `build.sh` – baut daraus `index.html`
-- `index.html` – fertige Seite, wird von GitHub Pages ausgeliefert
+- `build.sh` – baut daraus `app.html` (das Dashboard) und `index.html` (Startseite, die `app.html` immer frisch lädt)
+- `update.sh` – spielt die neueste Version in Home Assistant ein
 
 ## Ändern
 
 1. `src/hub.html` bearbeiten
 2. `./build.sh` ausführen
-3. Beide Dateien committen
+3. `src/hub.html`, `app.html` und `index.html` committen
+
+## In Home Assistant aktualisieren
+
+Im Terminal-Add-on:
+
+```
+wget -qO- https://raw.githubusercontent.com/collinkirschner/HomeHub/main/update.sh | sh
+```
+
+Das Dashboard auf dem iPad prüft stündlich, ob eine neue Version installiert ist, und lädt sich dann selbst neu.
 
 ## Auf dem iPad
 
@@ -26,5 +36,5 @@ und zeigt im Standby Uhr, Wetter und Termine.
 
 Hinweis: Wird die Seite über GitHub Pages (https) geladen, blockiert der Browser
 Verbindungen zu einem Home Assistant mit `http://`-Adresse. Für den Live-Betrieb
-`index.html` deshalb in Home Assistant unter `config/www/homehub/` ablegen und auf
-dem iPad `http://homeassistant.local:8123/local/homehub/index.html` öffnen.
+das Dashboard deshalb mit `update.sh` in Home Assistant installieren und auf dem
+iPad `http://homeassistant.local/local/homehub/index.html` öffnen.

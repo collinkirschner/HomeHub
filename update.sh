@@ -5,7 +5,11 @@
 set -e
 SHA=$(wget -qO- https://api.github.com/repos/collinkirschner/HomeHub/commits/main | grep -m1 '"sha"' | cut -d'"' -f4)
 [ -n "$SHA" ] || { echo "Konnte die neueste Version nicht ermitteln."; exit 1; }
-mkdir -p /config/www/homehub
-wget -qO /config/www/homehub/index.html.new "https://raw.githubusercontent.com/collinkirschner/HomeHub/$SHA/index.html"
-mv /config/www/homehub/index.html.new /config/www/homehub/index.html
-echo "Dashboard aktualisiert: $(grep -o 'Version 20[0-9-]* [0-9:]*' /config/www/homehub/index.html)"
+BASE="https://raw.githubusercontent.com/collinkirschner/HomeHub/$SHA"
+D=/config/www/homehub
+mkdir -p $D
+wget -qO $D/app.html.new "$BASE/app.html"
+wget -qO $D/index.html.new "$BASE/index.html"
+mv $D/app.html.new $D/app.html
+mv $D/index.html.new $D/index.html
+echo "Dashboard aktualisiert: Version $(grep -o "var BUILD = '[^']*'" $D/app.html | cut -d"'" -f2)"
