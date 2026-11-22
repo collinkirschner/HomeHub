@@ -949,7 +949,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
         if (d === 'light' || d === 'cover' || d === 'switch' || d === 'fan') {
           var x = me.reg[id] || {}; var area = x.area_id || devArea[x.device_id] || '_other';
           (rooms[area] = rooms[area] || []).push(id);
-        } else if (d === 'scene') { M.allScenes.push(id); M.scenePlat[id] = platform(id); }
+        } else if (d === 'scene' || d === 'script') { M.allScenes.push(id); M.scenePlat[id] = d === 'script' ? 'script' : platform(id); }
         else if (d === 'media_player') M.players.push(id);
         else if (d === 'climate') { M.climates.push(id); if (!M.climate) M.climate = id; }
         else if (d === 'lock') { if (platform(id) === 'ring') M.intercom = M.intercom || id; else M.lock = M.lock || id; }
@@ -1030,6 +1030,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   function sceneSub(id) {
     var e = M.ents[id];
     if (M.scenePlat[id] === 'hue') return 'Hue' + (attr(e, 'group_name', null) ? ' · ' + attr(e, 'group_name') : '');
+    if (M.scenePlat[id] === 'script') return 'Skript';
     return 'Home Assistant';
   }
 
@@ -1596,7 +1597,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     },
     detail: function (id) { var d = dom(id); if (d === 'light') lightSheet(id); else if (d === 'cover') coverSheet(id); else A.toggle(id); },
     scene: function (id) {
-      svc('scene', 'turn_on', {}, id); M.lastScene = id;
+      svc(dom(id) === 'script' ? 'script' : 'scene', 'turn_on', {}, id); M.lastScene = id;
       $$('.scn').forEach(function (el) { el.classList.toggle('is-active', el.getAttribute('data-arg') === id); });
       toast('Szene „' + name(id) + '“ aktiviert');
     },
