@@ -649,7 +649,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     saverAfter: 90, nightDim: true, clockStyle: 'thin',
     widgets: { date: true, weather: true, calendar: true, music: true, climate: true },
     cards: { scenes: true, media: true, climate: true, access: true },
-    room: 'all', media: null, motion: '', blackAfter: 0
+    room: 'all', media: null, motion: '', blackAfter: 0, scenes: null
   };
   var S = Object.assign({}, DEF, load('hub.settings', {}));
   S.widgets = Object.assign({}, DEF.widgets, S.widgets || {});
@@ -661,7 +661,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   /* ================= model ================= */
   var M = {
     ents: {}, rooms: [], scenes: [], players: [], climate: null, lock: null, intercom: null, camera: null,
-    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: []
+    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}
   };
   var hub = null;
 
@@ -720,7 +720,9 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       { id: 'flur', name: 'Flur', ids: ['light.flur'] },
       { id: 'aussen', name: 'Außen', ids: ['switch.gartenlicht', 'switch.terrassen_heizstrahler'] }
     ];
-    M.scenes = sc.map(function (s) { return s[0]; });
+    M.allScenes = sc.map(function (s) { return s[0]; });
+    M.scenePlat = {};
+    M.scenes = pickScenes();
     M.players = pl.map(function (p) { return p[0]; });
     M.climate = 'climate.wohnzimmer'; M.lock = 'lock.haustuer'; M.intercom = 'lock.ring_intercom'; M.camera = null;
     M.weather = 'weather.zuhause';
@@ -921,15 +923,17 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       var visible = function (id) { var x = me.reg[id]; return !x || (!x.hidden_by && !x.disabled_by && !x.entity_category); };
       var platform = function (id) { var x = me.reg[id]; return x ? x.platform : ''; };
       M.motions = [];
+      M.allScenes = []; M.scenePlat = {};
       M.scenes = []; M.players = []; M.climate = M.lock = M.intercom = M.camera = M.weather = null;
       var cals = [];
       states.forEach(function (s) {
         var id = s.entity_id, d = dom(id);
         if (!visible(id)) return;
+        if (d === 'light' && (attr(s, 'is_hue_group', false) || Object.prototype.toString.call(attr(s, 'entity_id', null)) === '[object Array]')) return;
         if (d === 'light' || d === 'cover' || d === 'switch' || d === 'fan') {
           var x = me.reg[id] || {}; var area = x.area_id || devArea[x.device_id] || '_other';
           (rooms[area] = rooms[area] || []).push(id);
-        } else if (d === 'scene') M.scenes.push(id);
+        } else if (d === 'scene') { M.allScenes.push(id); M.scenePlat[id] = platform(id); }
         else if (d === 'media_player') M.players.push(id);
         else if (d === 'climate' && !M.climate) M.climate = id;
         else if (d === 'lock') { if (platform(id) === 'ring') M.intercom = M.intercom || id; else M.lock = M.lock || id; }
@@ -938,6 +942,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
         else if (d === 'calendar') cals.push(id);
         else if (d === 'binary_sensor' && /^(motion|occupancy|presence)$/.test(attr(s, 'device_class', ''))) M.motions.push(id);
       });
+      M.scenes = pickScenes();
       var sonos = M.players.filter(function (id) { return platform(id) === 'sonos'; });
       if (sonos.length) M.players = sonos;
       order.push('_other');
@@ -996,6 +1001,17 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       .catch(function (e) { toast('Fehler: ' + e.message); });
   };
   HAHub.prototype.pic = function (path) { return path ? (/^https?:/.test(path) ? path : this.url + path) : null; };
+
+  /* ================= scene selection ================= */
+  function pickScenes() {
+    if (S.scenes && S.scenes.length !== undefined) return S.scenes.filter(function (id) { return M.allScenes.indexOf(id) >= 0; });
+    return M.allScenes.filter(function (id) { return M.scenePlat[id] !== 'hue'; });
+  }
+  function sceneSub(id) {
+    var e = M.ents[id];
+    if (M.scenePlat[id] === 'hue') return 'Hue' + (attr(e, 'group_name', null) ? ' · ' + attr(e, 'group_name') : '');
+    return 'Home Assistant';
+  }
 
   /* ================= derived helpers ================= */
   function name(id) { var e = M.ents[id]; return attr(e, 'friendly_name', id.split('.')[1]); }
@@ -1400,6 +1416,16 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       return '<div class="row"><span class="rl">' + o[1] + '</span><div class="switch' + (S.cards[o[0]] ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + !!S.cards[o[0]] + '" data-act="card" data-arg="' + o[0] + '"></div></div>';
     }).join('') + '</div>';
 
+    if (M.allScenes.length) {
+      h += '<div class="set-sec"><h3>Szenen im Dashboard</h3>' + M.allScenes.slice().sort(function (a, b) {
+        var pa = M.scenePlat[a] === 'hue' ? 1 : 0, pb = M.scenePlat[b] === 'hue' ? 1 : 0;
+        return pa - pb || String(name(a)).localeCompare(String(name(b)), 'de');
+      }).map(function (id) {
+        var on = M.scenes.indexOf(id) >= 0;
+        return '<div class="row"><span class="rl">' + esc(name(id)) + '<small>' + esc(sceneSub(id)) + '</small></span><div class="switch' + (on ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + on + '" data-act="sceneToggle" data-arg="' + esc(id) + '"></div></div>';
+      }).join('') + '<p class="note">Szenen aus Home Assistant sind anfangs eingeschaltet, Hue-Szenen aus.</p></div>';
+    }
+
     h += '<div class="set-sec"><h3>Standby</h3><div class="row"><span class="rl">Standby nach</span><div class="seg-s">' +
       [[30, '30 s'], [90, '1,5 min'], [300, '5 min'], [0, 'Nie']].map(function (o) { return '<button class="' + (S.saverAfter === o[0] ? 'is-active' : '') + '" data-act="saverAfter" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
       '<div class="row"><span class="rl">Uhr</span><div class="seg-s">' + [['thin', 'Dünn'], ['bold', 'Fett']].map(function (o) { return '<button class="' + (S.clockStyle === o[0] ? 'is-active' : '') + '" data-act="clockStyle" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
@@ -1566,6 +1592,12 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     pickWall: function () { $('#wpFile').click(); },
     removeWall: function () { customWall = null; try { localStorage.removeItem('hub.wallpaper'); } catch (e) {} if (S.wallpaper === 'custom') S.wallpaper = 'aurora'; save(); applyLook(); settingsSheet(); },
     fx: function (k) { S.fx = k; save(); applyLook(); settingsSheet(); },
+    sceneToggle: function (id) {
+      var list = M.scenes.slice(), i = list.indexOf(id);
+      if (i >= 0) list.splice(i, 1); else list.push(id);
+      S.scenes = list; save(); M.scenes = pickScenes(); renderRight();
+      var sh = $('#sheet'), top = sh.scrollTop; settingsSheet(); $('#sheet').scrollTop = top;
+    },
     card: function (k) { S.cards[k] = !S.cards[k]; save(); renderLeft(); renderRight(); settingsSheet(); },
     widget: function (k) { S.widgets[k] = !S.widgets[k]; save(); renderSaver(); settingsSheet(); },
     nightDim: function () { S.nightDim = !S.nightDim; save(); tickClock(); settingsSheet(); },
