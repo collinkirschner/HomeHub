@@ -1217,7 +1217,13 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     var same = M.climates.filter(function (c) { return roomOf(c) === room; }).length;
     return room ? (same > 1 ? room + ' · ' + name(id) : room) : name(id);
   }
-  function climTarget(e) { return e.state === 'off' ? 'Aus' : num(attr(e, 'temperature'), 1) + '°'; }
+  var climPending = {};
+  function climSet(id) {
+    var p = climPending[id];
+    if (p && Date.now() < p.until) return p.t;
+    var e = M.ents[id]; return e ? attr(e, 'temperature', null) : null;
+  }
+  function climTarget(e) { return e.state === 'off' ? 'Aus' : num(climSet(e.entity_id), 1) + '°'; }
   function climButtons(id, e) {
     return '<div class="wc-r"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="' + esc(id) + '|-1" aria-label="Kälter">' + ico('minus') + '</div>' +
       '<div class="wc-target">' + climTarget(e) + '</div>' +
@@ -1249,7 +1255,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     var h = sheetHead(climLabel(id), [name(id), attr(e, 'hub_brand', '')].filter(Boolean).join(' · '));
     h += '<div class="climate"><div class="now"><div class="big-temp">' + num(attr(e, 'current_temperature'), 1) + '°</div>' + climateState(e) + '</div>' +
       '<div class="target"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="' + esc(id) + '|1" aria-label="Wärmer">' + ico('plus') + '</div>' +
-      '<div class="val">' + (e.state === 'off' ? '–' : num(attr(e, 'temperature'), 1) + '°') + '</div>' +
+      '<div class="val">' + (e.state === 'off' ? '–' : num(climSet(id), 1) + '°') + '</div>' +
       '<div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="' + esc(id) + '|-1" aria-label="Kälter">' + ico('minus') + '</div></div></div>';
     h += '<div class="seg" style="grid-template-columns:repeat(' + Math.min(modes.length, 4) + ',1fr)">' + modes.slice(0, 4).map(function (m) {
       return '<button class="' + (e.state === m ? 'is-active' : '') + '" data-act="hvac" data-arg="' + esc(id) + '|' + esc(m) + '">' + esc(labels[m] || m) + '</button>';
@@ -1614,10 +1620,15 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     fav: function (f) { svc('media_player', 'select_source', { source: f }, activePlayer()); toast('Spielt „' + f + '“'); },
     temp: function (arg) {
       var p = String(arg).split('|'), id = p.length > 1 ? p[0] : M.climate, dir = Number(p[p.length - 1]);
-      var e = M.ents[id]; if (!e) return;
+      var e = M.ents[id]; if (!e || e.state === 'off') return;
+      var cur = climSet(id); if (cur == null) return;
       var step = attr(e, 'target_temp_step', 0.5) || 0.5;
-      var t = clamp((attr(e, 'temperature', 20) || 20) + step * dir, attr(e, 'min_temp', 5), attr(e, 'max_temp', 30));
-      svc('climate', 'set_temperature', { temperature: t }, id);
+      var t = Math.round(clamp(cur + step * dir, attr(e, 'min_temp', 5), attr(e, 'max_temp', 30)) / step) * step;
+      var p = climPending[id] = climPending[id] || {};
+      p.t = t; p.until = Date.now() + 8000;
+      clearTimeout(p.timer);
+      p.timer = setTimeout(function () { p.until = Date.now() + 6000; svc('climate', 'set_temperature', { temperature: t }, id); }, 900);
+      renderClimate(); renderSaver();
     },
     hvac: function (arg) { var p = String(arg).split('|'), id = p.length > 1 ? p[0] : M.climate; svc('climate', 'set_hvac_mode', { hvac_mode: p[p.length - 1] }, id); },
     lock: function (id) { svc('lock', 'lock', {}, id); toast(name(id) + ' wird verriegelt'); },
