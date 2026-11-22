@@ -678,7 +678,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   /* ================= model ================= */
   var M = {
     ents: {}, rooms: [], scenes: [], players: [], climate: null, lock: null, intercom: null, camera: null,
-    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}, climates: [], areaOf: {}, vacRooms: {}, vacBattery: {}, vacExtras: {}, vacAlerts: {}, alertOwner: {}
+    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}, climates: [], areaOf: {}, vacRooms: {}, vacBattery: {}, vacExtras: {}, vacAlerts: {}, alertOwner: {}, alertKey: {}
   };
   var hub = null;
 
@@ -752,6 +752,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     M.vacBattery = { 'vacuum.saugroboter': 'sensor.saugroboter_akku' };
     M.vacAlerts = { 'vacuum.saugroboter': ['binary_sensor.saugroboter_wassermangel'] };
     M.alertOwner = { 'binary_sensor.saugroboter_wassermangel': 'vacuum.saugroboter' };
+    M.alertKey = { 'binary_sensor.saugroboter_wassermangel': 'water' };
     M.vacExtras = { 'vacuum.saugroboter': ['select.saugstaerke', 'button.station_absaugen', 'switch.station_trocknen'] };
     M.climates = ['climate.wohnzimmer', 'climate.schlafzimmer', 'climate.bad'];
     M.areaOf = { 'climate.wohnzimmer': 'Wohnzimmer', 'climate.schlafzimmer': 'Schlafzimmer', 'climate.bad': 'Bad' };
@@ -990,16 +991,16 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
         else if (d === 'calendar') cals.push(id);
         else if (d === 'binary_sensor' && /^(motion|occupancy|presence)$/.test(attr(s, 'device_class', ''))) M.motions.push(id);
       });
-      M.vacBattery = {}; M.vacExtras = {}; M.vacAlerts = {}; M.alertOwner = {};
+      M.vacBattery = {}; M.vacExtras = {}; M.vacAlerts = {}; M.alertOwner = {}; M.alertKey = {};
       var vacs = Object.keys(M.ents).filter(function (k) { return dom(k) === 'vacuum'; });
       roboExtras.forEach(function (x) {
         var ce = (me.reg[x] || {}).config_entry_id;
         var v = vacs.filter(function (k) { return ce && (me.reg[k] || {}).config_entry_id === ce; })[0] || vacs[0];
         if (v) (M.vacExtras[v] = M.vacExtras[v] || []).push(x);
       });
-      roboAlerts.filter(function (x) { return /water|wasser|dust|staub|bag|beutel|tank|box|problem/.test(x) || attr(M.ents[x], 'device_class', '') === 'problem'; })
-        .filter(function (x) { return !/attached|mop_attached|befestigt|eingesetzt|charging|lädt/.test(x); })
+      roboAlerts.filter(function (x) { return !!alertKind(x, (me.reg[x] || {}).translation_key); })
         .forEach(function (x) {
+          M.alertKey[x] = alertKind(x, (me.reg[x] || {}).translation_key);
           var ce = (me.reg[x] || {}).config_entry_id;
           var v = vacs.filter(function (k) { return ce && (me.reg[k] || {}).config_entry_id === ce; })[0] || vacs[0];
           if (v) { (M.vacAlerts[v] = M.vacAlerts[v] || []).push(x); M.alertOwner[x] = v; }
@@ -1149,12 +1150,17 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (/aus|off/.test(n)) return 'power';
     return 'bulbs';
   }
+  // Only real problems count: anything like "attached", "drying" or "cleaning" is a normal status.
+  function alertKind(x, tkey) {
+    var k = (String(tkey || '') + ' ' + x + ' ' + String(name(x))).toLowerCase();
+    if (/attached|angebracht|eingesetzt|befestigt|installed|drying|trocknet|cleaning|reinigt|charging|lädt/.test(k)) return null;
+    if (/water_shortage|wassermangel|clean_water_box_empty|clean_fluid_empty|frischwasser.*leer/.test(k)) return 'water';
+    if (/dirty_water|schmutzwasser/.test(k)) return 'dirty';
+    if (/dust_bag|dustbag|staubbeutel|dust_collection_full/.test(k)) return 'dust';
+    return null;
+  }
   function alertText(x) {
-    var k = x.toLowerCase() + ' ' + String(name(x)).toLowerCase();
-    if (/dirty|schmutz/.test(k)) return 'Schmutzwasser voll';
-    if (/water_shortage|wassermangel|clean_water|frischwasser|water/.test(k)) return 'Wassertank leer';
-    if (/dust|staub|bag|beutel/.test(k)) return 'Staubbeutel voll';
-    return name(x);
+    return { water: 'Wassertank leer', dirty: 'Schmutzwasser voll', dust: 'Staubbeutel voll' }[M.alertKey[x] || alertKind(x)] || name(x);
   }
   function vacIssues(id) {
     var out = (M.vacAlerts[id] || []).filter(function (x) { return M.ents[x] && M.ents[x].state === 'on'; }).map(alertText);
