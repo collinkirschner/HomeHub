@@ -1020,7 +1020,11 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 
   /* ================= scene selection ================= */
   function pickScenes() {
-    if (S.scenes && S.scenes.length !== undefined) return S.scenes.filter(function (id) { return M.allScenes.indexOf(id) >= 0; });
+    if (S.scenes && S.scenes.length !== undefined) {
+      var known = S.sceneKnown || [];
+      return S.scenes.filter(function (id) { return M.allScenes.indexOf(id) >= 0; }).concat(
+        M.allScenes.filter(function (id) { return known.indexOf(id) < 0 && S.scenes.indexOf(id) < 0 && M.scenePlat[id] !== 'hue'; }));
+    }
     return M.allScenes.filter(function (id) { return M.scenePlat[id] !== 'hue'; });
   }
   function sceneSub(id) {
@@ -1649,7 +1653,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     sceneToggle: function (id) {
       var list = M.scenes.slice(), i = list.indexOf(id);
       if (i >= 0) list.splice(i, 1); else list.push(id);
-      S.scenes = list; save(); M.scenes = pickScenes(); renderRight();
+      S.scenes = list; S.sceneKnown = M.allScenes.slice(); save(); M.scenes = pickScenes(); renderRight();
       var sh = $('#sheet'), top = sh.scrollTop; settingsSheet(); $('#sheet').scrollTop = top;
     },
     card: function (k) { S.cards[k] = !S.cards[k]; save(); renderLeft(); renderRight(); settingsSheet(); },
