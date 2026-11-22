@@ -484,10 +484,11 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 .wcl .wc-r .btn-round { width: 34px; height: 34px; }
 .wcl .wc-target { width: 52px; font-size: 15px; }
 
-.tile.is-warn .state { color: var(--warn); font-weight: 600; }
-.tile.is-warn .ico { background: rgba(255, 181, 71, 0.28); color: var(--warn); box-shadow: none; }
-.tile.is-on.is-warn .state { color: #b06a00; }
-.warnbox { margin: -4px 0 14px; padding: 10px 14px; border-radius: 14px; background: rgba(255, 181, 71, 0.18); color: var(--warn); font-weight: 600; font-size: 14px; box-shadow: inset 0 0 0 1px rgba(255, 181, 71, 0.35); }
+.tile.is-warn .state { color: var(--crit); font-weight: 600; }
+.tile.is-warn .ico { background: rgba(255, 107, 107, 0.28); color: var(--crit); box-shadow: none; }
+.tile.is-on.is-warn .state { color: #c62828; }
+.warnbox { margin: -4px 0 14px; padding: 10px 14px; border-radius: 14px; background: rgba(255, 107, 107, 0.18); color: var(--crit); font-weight: 600; font-size: 14px; box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.4); }
+.hd-date .alert { color: var(--crit); font-weight: 600; }
 
 /* access widget */
 .wa { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 44px; }
@@ -1185,7 +1186,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     }
     if (d === 'vacuum') {
       var vs = { cleaning: 'Reinigt', docked: 'In der Station', returning: 'Fährt zurück', paused: 'Pausiert', idle: 'Bereit', error: 'Fehler' }[e.state] || e.state;
-      var iss = vacIssues(id); if (iss.length) return '⚠ ' + iss.join(' · ');
+      var iss = vacIssues(id); if (iss.length) return iss.join(' · ');
       var b = M.ents[M.vacBattery[id]];
       return vs + (b && !isNaN(parseFloat(b.state)) ? ' · ' + Math.round(parseFloat(b.state)) + ' %' : '');
     }
@@ -1229,8 +1230,9 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     parts.push(on ? on + (on === 1 ? ' Licht an' : ' Lichter an') : 'Alle Lichter aus');
     var lk = M.ents[M.lock];
     if (lk && lk.state !== 'locked') parts.push(name(M.lock) + ' offen');
-    Object.keys(M.vacAlerts).forEach(function (v) { var iss = vacIssues(v); if (iss.length) parts.push('⚠ ' + name(v) + ': ' + iss[0]); });
-    $('#dateLine').textContent = parts.join('  ·  ');
+    var alerts = [];
+    Object.keys(M.ents).forEach(function (v) { if (dom(v) === 'vacuum') vacIssues(v).forEach(function (t) { if (alerts.indexOf(t) < 0) alerts.push(t); }); });
+    $('#dateLine').innerHTML = parts.map(esc).join('  ·  ') + alerts.map(function (t) { return '  ·  <span class="alert">' + esc(t) + '</span>'; }).join('');
   }
   function inRooms(id) { return M.rooms.some(function (r) { return r.ids.indexOf(id) >= 0; }); }
 
