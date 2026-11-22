@@ -484,6 +484,11 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 .wcl .wc-r .btn-round { width: 34px; height: 34px; }
 .wcl .wc-target { width: 52px; font-size: 15px; }
 
+.tile.is-warn .state { color: var(--warn); font-weight: 600; }
+.tile.is-warn .ico { background: rgba(255, 181, 71, 0.28); color: var(--warn); box-shadow: none; }
+.tile.is-on.is-warn .state { color: #b06a00; }
+.warnbox { margin: -4px 0 14px; padding: 10px 14px; border-radius: 14px; background: rgba(255, 181, 71, 0.18); color: var(--warn); font-weight: 600; font-size: 14px; box-shadow: inset 0 0 0 1px rgba(255, 181, 71, 0.35); }
+
 /* access widget */
 .wa { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 44px; }
 .wa + .wa { margin-top: 12px; }
@@ -683,7 +688,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   /* ================= model ================= */
   var M = {
     ents: {}, rooms: [], scenes: [], players: [], climate: null, lock: null, intercom: null, camera: null,
-    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}, climates: [], areaOf: {}, vacRooms: {}, vacBattery: {}
+    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}, climates: [], areaOf: {}, vacRooms: {}, vacBattery: {}, vacExtras: {}, vacAlerts: {}, alertOwner: {}
   };
   var hub = null;
 
@@ -714,6 +719,10 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     add(mk('cover.vorhang_schlafzimmer', 'closed', { friendly_name: 'Vorhang', current_position: 0, hub_brand: 'SwitchBot' }));
     add(mk('vacuum.saugroboter', 'docked', { friendly_name: 'Saugroboter', hub_brand: 'Roborock' }));
     add(mk('sensor.saugroboter_akku', '87', { friendly_name: 'Akku', device_class: 'battery', unit_of_measurement: '%' }));
+    add(mk('button.station_absaugen', 'unknown', { friendly_name: 'Absaugen' }));
+    add(mk('switch.station_trocknen', 'off', { friendly_name: 'Mopp trocknen' }));
+    add(mk('select.saugstaerke', 'Ausgewogen', { friendly_name: 'Saugstärke', options: ['Leise', 'Ausgewogen', 'Turbo', 'Max'] }));
+    add(mk('binary_sensor.saugroboter_wassermangel', 'off', { friendly_name: 'Wassermangel', device_class: 'problem' }));
     add(mk('light.flur', 'off', { friendly_name: 'Flurlicht', brightness: 220, color_temp_kelvin: 3000, supported_color_modes: ['color_temp'], hub_icon: 'ceiling', hub_brand: 'IKEA' }));
     add(mk('switch.gartenlicht', 'off', { friendly_name: 'Gartenlicht', hub_icon: 'lantern', hub_brand: 'SwitchBot Relais' }));
     add(mk('switch.terrassen_heizstrahler', 'off', { friendly_name: 'Heizstrahler', hub_icon: 'power', hub_brand: 'SwitchBot Relais' }));
@@ -751,6 +760,9 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     M.scenes = pickScenes();
     M.players = pl.map(function (p) { return p[0]; });
     M.vacBattery = { 'vacuum.saugroboter': 'sensor.saugroboter_akku' };
+    M.vacAlerts = { 'vacuum.saugroboter': ['binary_sensor.saugroboter_wassermangel'] };
+    M.alertOwner = { 'binary_sensor.saugroboter_wassermangel': 'vacuum.saugroboter' };
+    M.vacExtras = { 'vacuum.saugroboter': ['select.saugstaerke', 'button.station_absaugen', 'switch.station_trocknen'] };
     M.climates = ['climate.wohnzimmer', 'climate.schlafzimmer', 'climate.bad'];
     M.areaOf = { 'climate.wohnzimmer': 'Wohnzimmer', 'climate.schlafzimmer': 'Schlafzimmer', 'climate.bad': 'Bad' };
     M.climate = 'climate.wohnzimmer'; M.lock = 'lock.haustuer'; M.intercom = 'lock.ring_intercom'; M.camera = null;
@@ -803,6 +815,8 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     var me = this, e = M.ents[id], a = data || {};
     if (domain === 'scene') { return this.scene(id); }
     if (domain === 'vacuum') { return this.vac(id, service); }
+    if (domain === 'select') { return this.set(id, a.option); }
+    if (domain === 'button') { return this.set(id, new Date().toISOString()); }
     if (domain === 'light') {
       if (service === 'turn_off') return this.set(id, 'off');
       if (service === 'toggle') return this.set(id, e.state === 'on' ? 'off' : 'on');
@@ -965,13 +979,15 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       M.motions = [];
       M.allScenes = []; M.scenePlat = {}; M.climates = []; M.areaOf = {};
       M.scenes = []; M.players = []; M.climate = M.lock = M.intercom = M.camera = M.weather = null;
-      var cals = [];
+      var cals = [], roboExtras = [], roboAlerts = [];
       states.forEach(function (s) {
         var id = s.entity_id, d = dom(id);
+        if (d === 'binary_sensor' && platform(id) === 'roborock' && !(me.reg[id] || {}).disabled_by) roboAlerts.push(id);
         if (!visible(id)) return;
         var rx = me.reg[id] || {}, ar = rx.area_id || devArea[rx.device_id];
         if (ar && areaName[ar]) M.areaOf[id] = areaName[ar];
         if (d === 'light' && (attr(s, 'is_hue_group', false) || Object.prototype.toString.call(attr(s, 'entity_id', null)) === '[object Array]')) return;
+        if (platform(id) === 'roborock' && /^(switch|button|select)$/.test(d)) { roboExtras.push(id); return; }
         if (d === 'light' || d === 'cover' || d === 'switch' || d === 'fan' || d === 'vacuum') {
           var x = me.reg[id] || {}; var area = x.area_id || devArea[x.device_id] || '_other';
           (rooms[area] = rooms[area] || []).push(id);
@@ -984,7 +1000,20 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
         else if (d === 'calendar') cals.push(id);
         else if (d === 'binary_sensor' && /^(motion|occupancy|presence)$/.test(attr(s, 'device_class', ''))) M.motions.push(id);
       });
-      M.vacBattery = {};
+      M.vacBattery = {}; M.vacExtras = {}; M.vacAlerts = {}; M.alertOwner = {};
+      var vacs = Object.keys(M.ents).filter(function (k) { return dom(k) === 'vacuum'; });
+      roboExtras.forEach(function (x) {
+        var ce = (me.reg[x] || {}).config_entry_id;
+        var v = vacs.filter(function (k) { return ce && (me.reg[k] || {}).config_entry_id === ce; })[0] || vacs[0];
+        if (v) (M.vacExtras[v] = M.vacExtras[v] || []).push(x);
+      });
+      roboAlerts.filter(function (x) { return /water|wasser|dust|staub|bag|beutel|tank|box|problem/.test(x) || attr(M.ents[x], 'device_class', '') === 'problem'; })
+        .filter(function (x) { return !/attached|mop_attached|befestigt|eingesetzt|charging|lädt/.test(x); })
+        .forEach(function (x) {
+          var ce = (me.reg[x] || {}).config_entry_id;
+          var v = vacs.filter(function (k) { return ce && (me.reg[k] || {}).config_entry_id === ce; })[0] || vacs[0];
+          if (v) { (M.vacAlerts[v] = M.vacAlerts[v] || []).push(x); M.alertOwner[x] = v; }
+        });
       Object.keys(M.ents).forEach(function (id) {
         if (dom(id) !== 'vacuum') return;
         var dev = (me.reg[id] || {}).device_id; if (!dev) return;
@@ -1130,6 +1159,18 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (/aus|off/.test(n)) return 'power';
     return 'bulbs';
   }
+  function alertText(x) {
+    var k = x.toLowerCase() + ' ' + String(name(x)).toLowerCase();
+    if (/dirty|schmutz/.test(k)) return 'Schmutzwasser voll';
+    if (/water_shortage|wassermangel|clean_water|frischwasser|water/.test(k)) return 'Wassertank leer';
+    if (/dust|staub|bag|beutel/.test(k)) return 'Staubbeutel voll';
+    return name(x);
+  }
+  function vacIssues(id) {
+    var out = (M.vacAlerts[id] || []).filter(function (x) { return M.ents[x] && M.ents[x].state === 'on'; }).map(alertText);
+    var e = M.ents[id]; if (e && e.state === 'error') out.push('Fehler am Gerät');
+    return out;
+  }
   function stateText(id) {
     var e = M.ents[id], d = dom(id);
     if (!e) return 'Nicht erreichbar';
@@ -1144,6 +1185,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     }
     if (d === 'vacuum') {
       var vs = { cleaning: 'Reinigt', docked: 'In der Station', returning: 'Fährt zurück', paused: 'Pausiert', idle: 'Bereit', error: 'Fehler' }[e.state] || e.state;
+      var iss = vacIssues(id); if (iss.length) return '⚠ ' + iss.join(' · ');
       var b = M.ents[M.vacBattery[id]];
       return vs + (b && !isNaN(parseFloat(b.state)) ? ' · ' + Math.round(parseFloat(b.state)) + ' %' : '');
     }
@@ -1187,6 +1229,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     parts.push(on ? on + (on === 1 ? ' Licht an' : ' Lichter an') : 'Alle Lichter aus');
     var lk = M.ents[M.lock];
     if (lk && lk.state !== 'locked') parts.push(name(M.lock) + ' offen');
+    Object.keys(M.vacAlerts).forEach(function (v) { var iss = vacIssues(v); if (iss.length) parts.push('⚠ ' + name(v) + ': ' + iss[0]); });
     $('#dateLine').textContent = parts.join('  ·  ');
   }
   function inRooms(id) { return M.rooms.some(function (r) { return r.ids.indexOf(id) >= 0; }); }
@@ -1357,6 +1400,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (on && d === 'cover') style = ' style="--tint:#9fd3ff"';
     if (on && d === 'vacuum') style = ' style="--tint:#9ff0c8"';
     if (on) cls += ' is-on';
+    if (d === 'vacuum' && vacIssues(id).length) cls += ' is-warn';
     return '<div class="' + cls + '"' + style + ' role="button" tabindex="0" data-ent="' + esc(id) + '" data-act="' + (d === 'vacuum' ? 'detail' : 'toggle') + '" data-arg="' + esc(id) + '" data-long="detail" aria-label="' + esc(name(id)) + ', ' + esc(stateText(id)) + '">' +
       '<span class="ico">' + ico(iconFor(id)) + '</span><span class="name">' + esc(name(id)) + '</span><span class="state">' + esc(stateText(id)) + '</span></div>';
   }
@@ -1423,13 +1467,14 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     raf = null;
     var ids = Object.keys(dirty); dirty = {};
     var doms = {};
+    ids.slice().forEach(function (id) { if (M.alertOwner[id] && ids.indexOf(M.alertOwner[id]) < 0) ids.push(M.alertOwner[id]); });
     ids.forEach(function (id) {
       doms[dom(id)] = 1;
       $$('[data-ent="' + id + '"]').forEach(function (el) {
         var t = document.createElement('div'); t.innerHTML = tile(id);
         el.parentNode.replaceChild(t.firstChild, el);
       });
-      if (sheetFor === id) refreshSheet();
+      if (sheetFor === id || (sheetKind === 'vacuum' && (M.vacExtras[sheetFor] || []).indexOf(id) >= 0)) refreshSheet();
       if (id === motionId() && M.ents[id] && M.ents[id].state === 'on') onMotion();
     });
     if (doms.media_player) renderMedia();
@@ -1461,11 +1506,14 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     else if (sheetKind === 'vacuum') vacuumSheet(sheetFor);
   }
   function roomOf(id) { if (M.areaOf[id]) return M.areaOf[id]; var r = M.rooms.filter(function (x) { return x.ids.indexOf(id) >= 0; })[0]; return r ? r.name : ''; }
+  var OPT_DE = { off: 'Aus', mild: 'Leicht', low: 'Niedrig', moderate: 'Mittel', medium: 'Mittel', high: 'Hoch', intense: 'Stark', quiet: 'Leise', balanced: 'Ausgewogen', standard: 'Standard', turbo: 'Turbo', max: 'Max', max_plus: 'Max+', custom: 'Eigene', custom_water_flow: 'Eigene', fast: 'Schnell', deep: 'Gründlich', deep_plus: 'Gründlich+', smart_mode: 'Smart', auto: 'Auto', on: 'An' };
   var vacSel = {}, vacMap = {};
   function vacuumSheet(id) {
     var e = M.ents[id]; if (!e) return;
     var maps = M.vacRooms[id], h = sheetHead(name(id), [roomOf(id), stateText(id)].filter(Boolean).join(' · '));
     vacSel[id] = vacSel[id] || {};
+    var iss = vacIssues(id);
+    if (iss.length) h += '<div class="warnbox">' + iss.map(esc).join('<br>') + '</div>';
     if (maps === undefined) {
       h += '<div class="empty" style="margin:6px 0 4px">Räume werden geladen …</div>';
     } else if (!maps.length) {
@@ -1481,7 +1529,19 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     }
     var n = Object.keys(vacSel[id]).length;
     h += '<button class="btn primary" style="width:100%;margin-top:16px' + (n ? '' : ';opacity:.45') + '" data-act="vacClean">' + (n ? n + (n === 1 ? ' Raum' : ' Räume') + ' reinigen' : 'Räume auswählen') + '</button>';
+    var extras = (M.vacExtras[id] || []).filter(function (x) { return M.ents[x]; });
+    var shortName = function (x) { var n = name(x), base = name(id); return n.indexOf(base) === 0 && n.length > base.length ? n.slice(base.length).replace(/^[\s:·-]+/, '') : n; };
+    var extraHtml = extras.map(function (x) {
+      var d = dom(x), xe = M.ents[x];
+      if (d === 'switch') return '<div class="row"><span class="rl">' + esc(shortName(x)) + '</span><div class="switch' + (xe.state === 'on' ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + (xe.state === 'on') + '" data-act="toggle" data-arg="' + esc(x) + '"></div></div>';
+      if (d === 'button') return '<div class="row"><span class="rl">' + esc(shortName(x)) + '</span><button class="btn" style="height:36px;padding:0 16px" data-act="press" data-arg="' + esc(x) + '">Starten</button></div>';
+      var opts = attr(xe, 'options', []) || [];
+      return '<div class="row" style="flex-wrap:wrap;padding:6px 0"><span class="rl" style="flex-basis:100%;margin-bottom:6px">' + esc(shortName(x)) + '</span><div class="seg-s" style="flex-wrap:wrap">' + opts.slice(0, 8).map(function (o) {
+        return '<button class="' + (xe.state === o ? 'is-active' : '') + '" data-act="selOpt" data-arg="' + esc(x) + '|' + esc(o) + '">' + esc(OPT_DE[o] || o) + '</button>';
+      }).join('') + '</div></div>';
+    }).join('');
     h += '<div class="btn-row"><button class="btn" data-act="vacCmd" data-arg="start">Alles</button><button class="btn" data-act="vacCmd" data-arg="pause">Pause</button><button class="btn" data-act="vacCmd" data-arg="return_to_base">Zur Station</button></div>';
+    if (extraHtml) h += '<div class="favs-label" style="margin-top:20px">Station & Einstellungen</div>' + extraHtml;
     openSheet(h, 'vacuum', id);
   }
   function openVacuum(id) {
@@ -1687,6 +1747,8 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       toast(segs.length + (segs.length === 1 ? ' Raum wird' : ' Räume werden') + ' gereinigt');
       vacSel[id] = {}; closeSheet();
     },
+    press: function (x) { svc('button', 'press', {}, x); toast(name(x) + ' gestartet'); },
+    selOpt: function (arg) { var i = arg.indexOf('|'); svc('select', 'select_option', { option: arg.slice(i + 1) }, arg.slice(0, i)); },
     vacCmd: function (c) {
       svc('vacuum', c, {}, sheetFor);
       toast({ start: 'Reinigung gestartet', pause: 'Pausiert', return_to_base: 'Fährt zur Station' }[c] || 'OK');
