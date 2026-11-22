@@ -463,6 +463,16 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 .wc-r .btn-round svg { width: 18px; height: 18px; }
 .wc-target { width: 58px; text-align: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+.wcl { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 46px; }
+.wcl + .wcl { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); }
+.wcl-n { -webkit-flex: 1; flex: 1; min-width: 0; }
+.wcl-n b { display: block; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wcl-n span { display: block; color: var(--ink-3); font-size: 13px; font-variant-numeric: tabular-nums; }
+.wcl-n em { font-style: normal; color: var(--ink); font-size: 15px; font-weight: 500; }
+.wcl-n i { font-style: normal; color: var(--warn); }
+.wcl .wc-r .btn-round { width: 34px; height: 34px; }
+.wcl .wc-target { width: 52px; font-size: 15px; }
+
 /* access widget */
 .wa { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 44px; }
 .wa + .wa { margin-top: 12px; }
@@ -661,7 +671,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   /* ================= model ================= */
   var M = {
     ents: {}, rooms: [], scenes: [], players: [], climate: null, lock: null, intercom: null, camera: null,
-    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}
+    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}, climates: [], areaOf: {}
   };
   var hub = null;
 
@@ -694,6 +704,8 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     add(mk('switch.gartenlicht', 'off', { friendly_name: 'Gartenlicht', hub_icon: 'lantern', hub_brand: 'SwitchBot Relais' }));
     add(mk('switch.terrassen_heizstrahler', 'off', { friendly_name: 'Heizstrahler', hub_icon: 'power', hub_brand: 'SwitchBot Relais' }));
     add(mk('climate.wohnzimmer', 'heat', { friendly_name: 'Thermostat', current_temperature: 21.4, temperature: 22, current_humidity: 46, hvac_action: 'heating', hvac_modes: ['heat', 'auto', 'off'], min_temp: 5, max_temp: 30, target_temp_step: 0.5, hub_brand: 'Aqara' }));
+    add(mk('climate.schlafzimmer', 'heat', { friendly_name: 'Thermostat', current_temperature: 19.2, temperature: 19, hvac_action: 'idle', hvac_modes: ['heat', 'off'], min_temp: 5, max_temp: 30, target_temp_step: 0.5, hub_brand: 'Aqara' }));
+    add(mk('climate.bad', 'heat', { friendly_name: 'Thermostat', current_temperature: 22.8, temperature: 23, hvac_action: 'heating', hvac_modes: ['heat', 'off'], min_temp: 5, max_temp: 30, target_temp_step: 0.5, hub_brand: 'Aqara' }));
     add(mk('lock.haustuer', 'locked', { friendly_name: 'Haustür', hub_brand: 'Aqara' }));
     add(mk('lock.ring_intercom', 'locked', { friendly_name: 'Haustür unten', hub_brand: 'Ring Intercom' }));
     var pl = [['media_player.wohnzimmer', 'Wohnzimmer', 'Sonos Arc', 'playing', 0.32, 0], ['media_player.kueche', 'Küche', 'Sonos Era 100', 'paused', 0.2, 2], ['media_player.schlafzimmer', 'Schlafzimmer', 'Sonos One', 'idle', 0.15, 3]];
@@ -724,6 +736,8 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     M.scenePlat = {};
     M.scenes = pickScenes();
     M.players = pl.map(function (p) { return p[0]; });
+    M.climates = ['climate.wohnzimmer', 'climate.schlafzimmer', 'climate.bad'];
+    M.areaOf = { 'climate.wohnzimmer': 'Wohnzimmer', 'climate.schlafzimmer': 'Schlafzimmer', 'climate.bad': 'Bad' };
     M.climate = 'climate.wohnzimmer'; M.lock = 'lock.haustuer'; M.intercom = 'lock.ring_intercom'; M.camera = null;
     M.weather = 'weather.zuhause';
     M.motions = ['binary_sensor.bewegung_flur'];
@@ -923,19 +937,21 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       var visible = function (id) { var x = me.reg[id]; return !x || (!x.hidden_by && !x.disabled_by && !x.entity_category); };
       var platform = function (id) { var x = me.reg[id]; return x ? x.platform : ''; };
       M.motions = [];
-      M.allScenes = []; M.scenePlat = {};
+      M.allScenes = []; M.scenePlat = {}; M.climates = []; M.areaOf = {};
       M.scenes = []; M.players = []; M.climate = M.lock = M.intercom = M.camera = M.weather = null;
       var cals = [];
       states.forEach(function (s) {
         var id = s.entity_id, d = dom(id);
         if (!visible(id)) return;
+        var rx = me.reg[id] || {}, ar = rx.area_id || devArea[rx.device_id];
+        if (ar && areaName[ar]) M.areaOf[id] = areaName[ar];
         if (d === 'light' && (attr(s, 'is_hue_group', false) || Object.prototype.toString.call(attr(s, 'entity_id', null)) === '[object Array]')) return;
         if (d === 'light' || d === 'cover' || d === 'switch' || d === 'fan') {
           var x = me.reg[id] || {}; var area = x.area_id || devArea[x.device_id] || '_other';
           (rooms[area] = rooms[area] || []).push(id);
         } else if (d === 'scene') { M.allScenes.push(id); M.scenePlat[id] = platform(id); }
         else if (d === 'media_player') M.players.push(id);
-        else if (d === 'climate' && !M.climate) M.climate = id;
+        else if (d === 'climate') { M.climates.push(id); if (!M.climate) M.climate = id; }
         else if (d === 'lock') { if (platform(id) === 'ring') M.intercom = M.intercom || id; else M.lock = M.lock || id; }
         else if (d === 'camera' && platform(id) === 'ring' && !M.camera) M.camera = id;
         else if (d === 'weather' && !M.weather) M.weather = id;
@@ -1185,26 +1201,47 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (attr(e, 'current_humidity', null) != null) t += ' · ' + num(attr(e, 'current_humidity')) + ' %';
     return '<div class="wc-s' + (heating ? ' heating' : '') + '">' + esc(t) + '</div>';
   }
-  function renderClimate() {
-    if (sheetKind === 'climate') climateSheet();
-    var el = $('#cardClimate'); if (!el) return;
-    var e = M.ents[M.climate]; if (!e) { el.innerHTML = ''; return; }
-    el.innerHTML = '<div class="wc"><div class="wc-l" role="button" tabindex="0" data-act="climateSheet"><div class="w-lbl">' + esc(roomOf(M.climate) || name(M.climate)) + '</div><div class="wc-t">' + num(attr(e, 'current_temperature'), 1) + '°</div>' + climateState(e) + '</div>' +
-      '<div class="wc-r"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="-1" aria-label="Kälter">' + ico('minus') + '</div>' +
-      '<div class="wc-target">' + (e.state === 'off' ? 'Aus' : num(attr(e, 'temperature'), 1) + '°') + '</div>' +
-      '<div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="1" aria-label="Wärmer">' + ico('plus') + '</div></div></div>';
+  function climLabel(id) {
+    var room = roomOf(id);
+    var same = M.climates.filter(function (c) { return roomOf(c) === room; }).length;
+    return room ? (same > 1 ? room + ' · ' + name(id) : room) : name(id);
   }
-  function climateSheet() {
-    var e = M.ents[M.climate]; if (!e) return;
+  function climTarget(e) { return e.state === 'off' ? 'Aus' : num(attr(e, 'temperature'), 1) + '°'; }
+  function climButtons(id, e) {
+    return '<div class="wc-r"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="' + esc(id) + '|-1" aria-label="Kälter">' + ico('minus') + '</div>' +
+      '<div class="wc-target">' + climTarget(e) + '</div>' +
+      '<div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="' + esc(id) + '|1" aria-label="Wärmer">' + ico('plus') + '</div></div>';
+  }
+  var climSheetId = null;
+  function renderClimate() {
+    if (sheetKind === 'climate' && climSheetId) climateSheet(climSheetId);
+    var el = $('#cardClimate'); if (!el) return;
+    var ids = M.climates.filter(function (c) { return M.ents[c]; });
+    if (!ids.length) { el.innerHTML = ''; return; }
+    if (ids.length === 1) {
+      var id = ids[0], e = M.ents[id];
+      el.innerHTML = '<div class="wc"><div class="wc-l" role="button" tabindex="0" data-act="climateSheet" data-arg="' + esc(id) + '"><div class="w-lbl">' + esc(climLabel(id)) + '</div><div class="wc-t">' + num(attr(e, 'current_temperature'), 1) + '°</div>' + climateState(e) + '</div>' + climButtons(id, e) + '</div>';
+      return;
+    }
+    el.innerHTML = '<div class="w-lbl" style="margin-bottom:8px">Heizung</div>' + ids.map(function (id) {
+      var e = M.ents[id], heating = attr(e, 'hvac_action', '') === 'heating';
+      return '<div class="wcl"><div class="wcl-n" role="button" tabindex="0" data-act="climateSheet" data-arg="' + esc(id) + '"><b>' + esc(climLabel(id)) + '</b>' +
+        '<span><em>' + num(attr(e, 'current_temperature'), 1) + '°</em>' + (e.state === 'off' ? ' · Aus' : heating ? ' · <i class="heating">Heizt</i>' : '') + '</span></div>' + climButtons(id, e) + '</div>';
+    }).join('');
+  }
+  function climateSheet(id) {
+    id = id || M.climate;
+    var e = M.ents[id]; if (!e) return;
+    climSheetId = id;
     var modes = attr(e, 'hvac_modes', ['heat', 'off']) || [];
     var labels = { heat: 'Heizen', auto: 'Auto', off: 'Aus', cool: 'Kühlen', heat_cool: 'Auto', eco: 'Eco' };
-    var h = sheetHead(name(M.climate), [roomOf(M.climate), attr(e, 'hub_brand', '')].filter(Boolean).join(' · '));
+    var h = sheetHead(climLabel(id), [name(id), attr(e, 'hub_brand', '')].filter(Boolean).join(' · '));
     h += '<div class="climate"><div class="now"><div class="big-temp">' + num(attr(e, 'current_temperature'), 1) + '°</div>' + climateState(e) + '</div>' +
-      '<div class="target"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="1" aria-label="Wärmer">' + ico('plus') + '</div>' +
+      '<div class="target"><div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="' + esc(id) + '|1" aria-label="Wärmer">' + ico('plus') + '</div>' +
       '<div class="val">' + (e.state === 'off' ? '–' : num(attr(e, 'temperature'), 1) + '°') + '</div>' +
-      '<div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="-1" aria-label="Kälter">' + ico('minus') + '</div></div></div>';
+      '<div class="btn-round" role="button" tabindex="0" data-act="temp" data-arg="' + esc(id) + '|-1" aria-label="Kälter">' + ico('minus') + '</div></div></div>';
     h += '<div class="seg" style="grid-template-columns:repeat(' + Math.min(modes.length, 4) + ',1fr)">' + modes.slice(0, 4).map(function (m) {
-      return '<button class="' + (e.state === m ? 'is-active' : '') + '" data-act="hvac" data-arg="' + esc(m) + '">' + esc(labels[m] || m) + '</button>';
+      return '<button class="' + (e.state === m ? 'is-active' : '') + '" data-act="hvac" data-arg="' + esc(id) + '|' + esc(m) + '">' + esc(labels[m] || m) + '</button>';
     }).join('') + '</div>';
     openSheet(h, 'climate', null);
   }
@@ -1292,8 +1329,13 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       var pe = M.ents[pid];
       h += '<div class="glass sw sw-music"><div class="art" style="' + artStyle(pe) + '"></div><div style="min-width:0"><div class="t">' + esc(attr(pe, 'media_title', '')) + '</div><div class="a">' + esc(attr(pe, 'media_artist', '')) + ' · ' + esc(name(pid)) + '</div></div></div>';
     }
-    var cl = M.ents[M.climate];
-    if (S.widgets.climate && cl) {
+    var cl = M.ents[M.climate], cids = M.climates.filter(function (c) { return M.ents[c]; });
+    if (S.widgets.climate && cids.length > 1) {
+      h += '<div class="glass sw"><h4>Raumklima</h4>' + cids.map(function (c) {
+        var ce = M.ents[c];
+        return '<div class="ev"><span class="ti" style="flex:1">' + esc(climLabel(c)) + '</span><span class="tm" style="width:auto;text-align:right">' + num(attr(ce, 'current_temperature'), 1) + '° <span style="color:var(--ink-3)">→ ' + climTarget(ce) + '</span></span></div>';
+      }).join('') + '</div>';
+    } else if (S.widgets.climate && cl) {
       h += '<div class="glass sw sw-clim"><div><small>Innen</small>' + num(attr(cl, 'current_temperature'), 1) + '°</div>' + (attr(cl, 'current_humidity', null) != null ? '<div><small>Luftfeuchte</small>' + num(attr(cl, 'current_humidity')) + ' %</div>' : '') + '<div><small>Ziel</small>' + (cl.state === 'off' ? 'Aus' : num(attr(cl, 'temperature'), 1) + '°') + '</div></div>';
     }
     box.innerHTML = h;
@@ -1355,7 +1397,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (sheetKind === 'light') lightSheet(sheetFor);
     else if (sheetKind === 'cover') coverSheet(sheetFor);
   }
-  function roomOf(id) { var r = M.rooms.filter(function (x) { return x.ids.indexOf(id) >= 0; })[0]; return r ? r.name : ''; }
+  function roomOf(id) { if (M.areaOf[id]) return M.areaOf[id]; var r = M.rooms.filter(function (x) { return x.ids.indexOf(id) >= 0; })[0]; return r ? r.name : ''; }
   function lightSheet(id) {
     var e = M.ents[id], on = e.state === 'on', p = on ? bri(e) : 0, c = lightRGB(e);
     var modes = attr(e, 'supported_color_modes', []) || [];
@@ -1559,18 +1601,19 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     media: function (cmd) { svc('media_player', cmd, {}, activePlayer()); },
     pickPlayer: function (id) { S.media = id; save(); renderMedia(); },
     fav: function (f) { svc('media_player', 'select_source', { source: f }, activePlayer()); toast('Spielt „' + f + '“'); },
-    temp: function (dir) {
-      var e = M.ents[M.climate]; if (!e) return;
+    temp: function (arg) {
+      var p = String(arg).split('|'), id = p.length > 1 ? p[0] : M.climate, dir = Number(p[p.length - 1]);
+      var e = M.ents[id]; if (!e) return;
       var step = attr(e, 'target_temp_step', 0.5) || 0.5;
-      var t = clamp((attr(e, 'temperature', 20) || 20) + step * Number(dir), attr(e, 'min_temp', 5), attr(e, 'max_temp', 30));
-      svc('climate', 'set_temperature', { temperature: t }, M.climate);
+      var t = clamp((attr(e, 'temperature', 20) || 20) + step * dir, attr(e, 'min_temp', 5), attr(e, 'max_temp', 30));
+      svc('climate', 'set_temperature', { temperature: t }, id);
     },
-    hvac: function (m) { svc('climate', 'set_hvac_mode', { hvac_mode: m }, M.climate); },
+    hvac: function (arg) { var p = String(arg).split('|'), id = p.length > 1 ? p[0] : M.climate; svc('climate', 'set_hvac_mode', { hvac_mode: p[p.length - 1] }, id); },
     lock: function (id) { svc('lock', 'lock', {}, id); toast(name(id) + ' wird verriegelt'); },
     unlock: function (id) { svc('lock', 'unlock', {}, id); toast(id === M.intercom ? 'Summer ausgelöst' : name(id) + ' wird geöffnet'); if (sheetKind === 'bell') setTimeout(closeSheet, 900); },
     doorbell: function () { showDoorbell(); },
     mediaSheet: function () { mediaSheet(); },
-    climateSheet: function () { climateSheet(); },
+    climateSheet: function (id) { climateSheet(id); },
     doorbellTest: function () { closeSheet(); M.lastRing = new Date(); renderAccess(); setTimeout(showDoorbell, 300); },
     motionPick: function (v) { S.motion = v || 'none'; save(); settingsSheet(); },
     blackAfter: function (v) { S.blackAfter = Number(v); save(); settingsSheet(); },
