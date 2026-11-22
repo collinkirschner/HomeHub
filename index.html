@@ -643,6 +643,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     camera: '<rect x="3" y="6" width="13" height="12" rx="3"/><path d="M16 10l5-3v10l-5-3"/>',
     image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
     link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    robot: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="8.8" r="1.8"/><path d="M7.5 15h9"/>',
     bulbs: '<path d="M12 3v2M5.6 5.6L7 7M3 12h2M19 12h2M17 7l1.4-1.4"/><path d="M9.5 18h5M10.5 21h3M12 8a4 4 0 0 0-2.4 7.2c.4.3.6.8.6 1.3v.5h3.6v-.5c0-.5.2-1 .6-1.3A4 4 0 0 0 12 8z"/>'
   };
   function ico(n, extra) {
@@ -682,7 +683,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   /* ================= model ================= */
   var M = {
     ents: {}, rooms: [], scenes: [], players: [], climate: null, lock: null, intercom: null, camera: null,
-    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}, climates: [], areaOf: {}
+    weather: null, forecast: [], events: [], lastScene: null, lastRing: null, motions: [], allScenes: [], scenePlat: {}, climates: [], areaOf: {}, vacRooms: {}, vacBattery: {}
   };
   var hub = null;
 
@@ -711,6 +712,8 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     add(mk('light.nachttisch', 'off', { friendly_name: 'Nachttisch', brightness: 90, color_temp_kelvin: 2200, supported_color_modes: ['color_temp', 'xy'], hub_icon: 'bulb', hub_brand: 'Philips Hue' }));
     add(mk('light.schlafzimmer_decke', 'off', { friendly_name: 'Deckenlicht', brightness: 255, color_temp_kelvin: 3000, supported_color_modes: ['color_temp'], hub_icon: 'ceiling', hub_brand: 'IKEA' }));
     add(mk('cover.vorhang_schlafzimmer', 'closed', { friendly_name: 'Vorhang', current_position: 0, hub_brand: 'SwitchBot' }));
+    add(mk('vacuum.saugroboter', 'docked', { friendly_name: 'Saugroboter', hub_brand: 'Roborock' }));
+    add(mk('sensor.saugroboter_akku', '87', { friendly_name: 'Akku', device_class: 'battery', unit_of_measurement: '%' }));
     add(mk('light.flur', 'off', { friendly_name: 'Flurlicht', brightness: 220, color_temp_kelvin: 3000, supported_color_modes: ['color_temp'], hub_icon: 'ceiling', hub_brand: 'IKEA' }));
     add(mk('switch.gartenlicht', 'off', { friendly_name: 'Gartenlicht', hub_icon: 'lantern', hub_brand: 'SwitchBot Relais' }));
     add(mk('switch.terrassen_heizstrahler', 'off', { friendly_name: 'Heizstrahler', hub_icon: 'power', hub_brand: 'SwitchBot Relais' }));
@@ -740,13 +743,14 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       { id: 'wohnzimmer', name: 'Wohnzimmer', ids: ['light.wohnzimmer_decke', 'light.tv_lightstrip', 'light.stehlampe', 'cover.vorhang_wohnzimmer'] },
       { id: 'kueche', name: 'Küche', ids: ['light.kueche_spots', 'light.kuecheninsel', 'switch.kaffeemaschine'] },
       { id: 'schlafzimmer', name: 'Schlafzimmer', ids: ['light.nachttisch', 'light.schlafzimmer_decke', 'cover.vorhang_schlafzimmer'] },
-      { id: 'flur', name: 'Flur', ids: ['light.flur'] },
+      { id: 'flur', name: 'Flur', ids: ['light.flur', 'vacuum.saugroboter'] },
       { id: 'aussen', name: 'Außen', ids: ['switch.gartenlicht', 'switch.terrassen_heizstrahler'] }
     ];
     M.allScenes = sc.map(function (s) { return s[0]; });
     M.scenePlat = {};
     M.scenes = pickScenes();
     M.players = pl.map(function (p) { return p[0]; });
+    M.vacBattery = { 'vacuum.saugroboter': 'sensor.saugroboter_akku' };
     M.climates = ['climate.wohnzimmer', 'climate.schlafzimmer', 'climate.bad'];
     M.areaOf = { 'climate.wohnzimmer': 'Wohnzimmer', 'climate.schlafzimmer': 'Schlafzimmer', 'climate.bad': 'Bad' };
     M.climate = 'climate.wohnzimmer'; M.lock = 'lock.haustuer'; M.intercom = 'lock.ring_intercom'; M.camera = null;
@@ -798,6 +802,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   DemoHub.prototype.call = function (domain, service, data, id) {
     var me = this, e = M.ents[id], a = data || {};
     if (domain === 'scene') { return this.scene(id); }
+    if (domain === 'vacuum') { return this.vac(id, service); }
     if (domain === 'light') {
       if (service === 'turn_off') return this.set(id, 'off');
       if (service === 'toggle') return this.set(id, e.state === 'on' ? 'off' : 'on');
@@ -847,6 +852,16 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       if (service === 'select_source') { this.trackIx[id] = (FAVS.indexOf(a.source) + 1) % TRACKS.length; this.skip(id, 0); return this.set(id, 'playing', { source: a.source }); }
       if (service === 'media_pause') return this.set(id, 'paused', { media_position: mediaPos(e), media_position_updated_at: new Date().toISOString() });
     }
+  };
+  DemoHub.prototype.vacRooms = function () {
+    return Promise.resolve([{ name: 'Erdgeschoss', rooms: [[16, 'Wohnzimmer'], [17, 'Küche'], [18, 'Flur'], [19, 'Bad'], [20, 'Schlafzimmer']] }]);
+  };
+  DemoHub.prototype.vac = function (id, service) {
+    var me = this, st = { start: 'cleaning', send_command: 'cleaning', pause: 'paused', return_to_base: 'returning', stop: 'idle' }[service];
+    if (!st) return;
+    this.set(id, st);
+    clearTimeout(this.vacT);
+    if (st === 'returning') this.vacT = setTimeout(function () { me.set(id, 'docked'); }, 6000);
   };
   DemoHub.prototype.scene = function (id) {
     var me = this;
@@ -957,7 +972,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
         var rx = me.reg[id] || {}, ar = rx.area_id || devArea[rx.device_id];
         if (ar && areaName[ar]) M.areaOf[id] = areaName[ar];
         if (d === 'light' && (attr(s, 'is_hue_group', false) || Object.prototype.toString.call(attr(s, 'entity_id', null)) === '[object Array]')) return;
-        if (d === 'light' || d === 'cover' || d === 'switch' || d === 'fan') {
+        if (d === 'light' || d === 'cover' || d === 'switch' || d === 'fan' || d === 'vacuum') {
           var x = me.reg[id] || {}; var area = x.area_id || devArea[x.device_id] || '_other';
           (rooms[area] = rooms[area] || []).push(id);
         } else if (d === 'scene' || d === 'script') { M.allScenes.push(id); M.scenePlat[id] = d === 'script' ? 'script' : platform(id); }
@@ -968,6 +983,13 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
         else if (d === 'weather' && !M.weather) M.weather = id;
         else if (d === 'calendar') cals.push(id);
         else if (d === 'binary_sensor' && /^(motion|occupancy|presence)$/.test(attr(s, 'device_class', ''))) M.motions.push(id);
+      });
+      M.vacBattery = {};
+      Object.keys(M.ents).forEach(function (id) {
+        if (dom(id) !== 'vacuum') return;
+        var dev = (me.reg[id] || {}).device_id; if (!dev) return;
+        var bat = Object.keys(M.ents).filter(function (k) { return dom(k) === 'sensor' && (me.reg[k] || {}).device_id === dev && attr(M.ents[k], 'device_class', '') === 'battery'; })[0];
+        if (bat) M.vacBattery[id] = bat;
       });
       M.scenes = pickScenes();
       var sonos = M.players.filter(function (id) { return platform(id) === 'sonos'; });
@@ -1027,6 +1049,16 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     return this.send({ type: 'call_service', domain: domain, service: service, service_data: data || {}, target: { entity_id: id } })
       .catch(function (e) { toast('Fehler: ' + e.message); });
   };
+  HAHub.prototype.vacRooms = function (id) {
+    return this.send({ type: 'call_service', domain: 'roborock', service: 'get_maps', service_data: {}, target: { entity_id: id }, return_response: true })
+      .then(function (r) {
+        var maps = (r && r.response && r.response[id] && r.response[id].maps) || [];
+        return maps.map(function (m) {
+          var rooms = m.rooms || {};
+          return { name: m.name || ('Karte ' + ((m.flag || 0) + 1)), rooms: Object.keys(rooms).map(function (k) { return [Number(k), rooms[k]]; }) };
+        });
+      });
+  };
   HAHub.prototype.pic = function (path) { return path ? (/^https?:/.test(path) ? path : this.url + path) : null; };
 
   /* ================= scene selection ================= */
@@ -1051,6 +1083,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     var e = M.ents[id]; if (!e) return false;
     var d = dom(id);
     if (d === 'cover') return attr(e, 'current_position', e.state === 'open' ? 100 : 0) > 0 || e.state === 'opening';
+    if (d === 'vacuum') return e.state === 'cleaning' || e.state === 'returning';
     return e.state === 'on';
   }
   function bri(e) { return Math.round(attr(e, 'brightness', 0) / 2.55); }
@@ -1072,6 +1105,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   function iconFor(id) {
     var e = M.ents[id], d = dom(id), hi = attr(e, 'hub_icon', null);
     if (d === 'cover') return isOn(id) ? 'curtain' : 'curtainShut';
+    if (d === 'vacuum') return 'robot';
     if (hi) return hi;
     var n = (name(id) || '').toLowerCase();
     if (d === 'light') {
@@ -1107,6 +1141,11 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       if (e.state === 'closing') return 'Schließt … ' + (p != null ? p + ' %' : '');
       if (p == null) return e.state === 'open' ? 'Offen' : 'Geschlossen';
       return p === 0 ? 'Geschlossen' : p === 100 ? 'Offen' : p + ' % offen';
+    }
+    if (d === 'vacuum') {
+      var vs = { cleaning: 'Reinigt', docked: 'In der Station', returning: 'Fährt zurück', paused: 'Pausiert', idle: 'Bereit', error: 'Fehler' }[e.state] || e.state;
+      var b = M.ents[M.vacBattery[id]];
+      return vs + (b && !isNaN(parseFloat(b.state)) ? ' · ' + Math.round(parseFloat(b.state)) + ' %' : '');
     }
     return e.state === 'on' ? 'An' : 'Aus';
   }
@@ -1316,8 +1355,9 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     var e = M.ents[id], d = dom(id), on = isOn(id), style = '', cls = 'tile';
     if (on && d === 'light') { var c = lightRGB(e); style = ' style="--tint:' + rgbCss(c) + '"'; if (c[0] < 200) cls += ' cool'; }
     if (on && d === 'cover') style = ' style="--tint:#9fd3ff"';
+    if (on && d === 'vacuum') style = ' style="--tint:#9ff0c8"';
     if (on) cls += ' is-on';
-    return '<div class="' + cls + '"' + style + ' role="button" tabindex="0" data-ent="' + esc(id) + '" data-act="toggle" data-arg="' + esc(id) + '" data-long="detail" aria-label="' + esc(name(id)) + ', ' + esc(stateText(id)) + '">' +
+    return '<div class="' + cls + '"' + style + ' role="button" tabindex="0" data-ent="' + esc(id) + '" data-act="' + (d === 'vacuum' ? 'detail' : 'toggle') + '" data-arg="' + esc(id) + '" data-long="detail" aria-label="' + esc(name(id)) + ', ' + esc(stateText(id)) + '">' +
       '<span class="ico">' + ico(iconFor(id)) + '</span><span class="name">' + esc(name(id)) + '</span><span class="state">' + esc(stateText(id)) + '</span></div>';
   }
 
@@ -1418,8 +1458,39 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (vsDrag) return;
     if (sheetKind === 'light') lightSheet(sheetFor);
     else if (sheetKind === 'cover') coverSheet(sheetFor);
+    else if (sheetKind === 'vacuum') vacuumSheet(sheetFor);
   }
   function roomOf(id) { if (M.areaOf[id]) return M.areaOf[id]; var r = M.rooms.filter(function (x) { return x.ids.indexOf(id) >= 0; })[0]; return r ? r.name : ''; }
+  var vacSel = {}, vacMap = {};
+  function vacuumSheet(id) {
+    var e = M.ents[id]; if (!e) return;
+    var maps = M.vacRooms[id], h = sheetHead(name(id), [roomOf(id), stateText(id)].filter(Boolean).join(' · '));
+    vacSel[id] = vacSel[id] || {};
+    if (maps === undefined) {
+      h += '<div class="empty" style="margin:6px 0 4px">Räume werden geladen …</div>';
+    } else if (!maps.length) {
+      h += '<div class="empty" style="margin:6px 0 4px">Keine Räume gefunden. Raumreinigung ist nur mit Roborock möglich.</div>';
+    } else {
+      var mi = Math.min(vacMap[id] || 0, maps.length - 1), m = maps[mi];
+      if (maps.length > 1) h += '<div class="speakers" style="margin:0 0 12px">' + maps.map(function (mp, i) {
+        return '<div class="pill' + (i === mi ? ' is-active' : '') + '" role="button" tabindex="0" data-act="vacMap" data-arg="' + i + '">' + esc(mp.name) + '</div>';
+      }).join('') + '</div>';
+      h += '<div class="favs-label" style="margin-top:0">Räume auswählen</div><div class="favs">' + m.rooms.map(function (r) {
+        return '<div class="fav' + (vacSel[id][r[0]] ? ' is-active' : '') + '" role="button" tabindex="0" data-act="vacRoom" data-arg="' + r[0] + '"><span>' + esc(r[1]) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    var n = Object.keys(vacSel[id]).length;
+    h += '<button class="btn primary" style="width:100%;margin-top:16px' + (n ? '' : ';opacity:.45') + '" data-act="vacClean">' + (n ? n + (n === 1 ? ' Raum' : ' Räume') + ' reinigen' : 'Räume auswählen') + '</button>';
+    h += '<div class="btn-row"><button class="btn" data-act="vacCmd" data-arg="start">Alles</button><button class="btn" data-act="vacCmd" data-arg="pause">Pause</button><button class="btn" data-act="vacCmd" data-arg="return_to_base">Zur Station</button></div>';
+    openSheet(h, 'vacuum', id);
+  }
+  function openVacuum(id) {
+    vacuumSheet(id);
+    if (M.vacRooms[id] === undefined && hub && hub.vacRooms) {
+      hub.vacRooms(id).then(function (maps) { M.vacRooms[id] = maps; }, function () { M.vacRooms[id] = []; })
+        .then(function () { if (sheetKind === 'vacuum' && sheetFor === id) vacuumSheet(id); });
+    }
+  }
   function lightSheet(id) {
     var e = M.ents[id], on = e.state === 'on', p = on ? bri(e) : 0, c = lightRGB(e);
     var modes = attr(e, 'supported_color_modes', []) || [];
@@ -1606,7 +1677,21 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       if (d === 'cover') return svc('cover', isOn(id) ? 'close_cover' : 'open_cover', {}, id);
       svc(d === 'light' || d === 'switch' || d === 'fan' ? d : 'homeassistant', 'toggle', {}, id);
     },
-    detail: function (id) { var d = dom(id); if (d === 'light') lightSheet(id); else if (d === 'cover') coverSheet(id); else A.toggle(id); },
+    detail: function (id) { var d = dom(id); if (d === 'light') lightSheet(id); else if (d === 'cover') coverSheet(id); else if (d === 'vacuum') openVacuum(id); else A.toggle(id); },
+    vacRoom: function (seg) { var s = vacSel[sheetFor] = vacSel[sheetFor] || {}; if (s[seg]) delete s[seg]; else s[seg] = 1; vacuumSheet(sheetFor); },
+    vacMap: function (i) { vacMap[sheetFor] = Number(i); vacSel[sheetFor] = {}; vacuumSheet(sheetFor); },
+    vacClean: function () {
+      var id = sheetFor, segs = Object.keys(vacSel[id] || {}).map(Number);
+      if (!segs.length) return toast('Bitte zuerst Räume antippen');
+      svc('vacuum', 'send_command', { command: 'app_segment_clean', params: [{ segments: segs, repeat: 1 }] }, id);
+      toast(segs.length + (segs.length === 1 ? ' Raum wird' : ' Räume werden') + ' gereinigt');
+      vacSel[id] = {}; closeSheet();
+    },
+    vacCmd: function (c) {
+      svc('vacuum', c, {}, sheetFor);
+      toast({ start: 'Reinigung gestartet', pause: 'Pausiert', return_to_base: 'Fährt zur Station' }[c] || 'OK');
+      if (c !== 'pause') closeSheet();
+    },
     scene: function (id) {
       svc(dom(id) === 'script' ? 'script' : 'scene', 'turn_on', {}, id); M.lastScene = id;
       $$('.scn').forEach(function (el) { el.classList.toggle('is-active', el.getAttribute('data-arg') === id); });
