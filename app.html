@@ -530,6 +530,9 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 .tile { height: 100px; padding: 13px 14px; border-radius: 22px; background: rgba(255,255,255,0.11); }
 .fx-full .tile { -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); }
 .fx-light .tile { background: rgba(20, 24, 40, 0.5); }
+.fx-balanced .scn .c, .fx-light .scn .c { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(255,255,255,0.14); }
+.fx-light .scn .c { background: rgba(20, 24, 40, 0.55); }
+.wline i, .progress .line i { -webkit-transform: translateZ(0); transform: translateZ(0); }
 .tile .ico { width: 34px; height: 34px; border-radius: 17px; background: none; color: var(--ink-2); }
 .tile .ico svg { width: 24px; height: 24px; }
 .tile .name { margin-top: 6px; }
@@ -590,7 +593,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 (function () {
   'use strict';
 
-  var BUILD = '2026-11-27 17:01';
+  var BUILD = '2026-11-27 17:09';
 
   /* ================= helpers ================= */
   function $(s, r) { return (r || document).querySelector(s); }
@@ -1078,6 +1081,11 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   HAHub.prototype.onEvent = function (ev) {
     if (!ev || ev.event_type !== 'state_changed') return;
     var d = ev.data, id = d.entity_id;
+    var o = optimistic[id];
+    if (o && d.new_state) {
+      if (d.new_state.state !== o.target) { o.prev = d.new_state; return; }  // stale report: keep showing the target
+      clearTimeout(o.timer); delete optimistic[id];                           // confirmed
+    }
     if (d.new_state) M.ents[id] = d.new_state; else delete M.ents[id];
     var x = this.reg[id];
     if (dom(id) === 'event' && x && x.platform === 'ring' && d.old_state && d.new_state && d.old_state.state !== d.new_state.state) {
@@ -1762,7 +1770,28 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   }
 
   /* ================= actions ================= */
-  function svc(domain, service, data, id) { if (hub && id) hub.call(domain, service, data, id); }
+  // Optimistic UI: lights, switches and fans flip immediately; if Home Assistant does not
+  // confirm within 10 s, the tile falls back to the last confirmed state.
+  var optimistic = {};
+  function svc(domain, service, data, id) {
+    if (!hub || !id) return;
+    var e = M.ents[id];
+    if (e && !(hub instanceof DemoHub) && /^(light|switch|fan)$/.test(domain) && /^(turn_on|turn_off|toggle)$/.test(service)) {
+      var st = service === 'toggle' ? (e.state === 'on' ? 'off' : 'on') : service === 'turn_on' ? 'on' : 'off';
+      var at = {};
+      if (data && data.brightness_pct != null) at.brightness = Math.round(data.brightness_pct * 2.55);
+      if (data && data.color_temp_kelvin) { at.color_temp_kelvin = data.color_temp_kelvin; at.color_mode = 'color_temp'; }
+      if (data && data.rgb_color) { at.rgb_color = data.rgb_color; at.color_mode = 'xy'; }
+      var o = optimistic[id] || { prev: e };
+      o.target = st;
+      clearTimeout(o.timer);
+      o.timer = setTimeout(function () { if (optimistic[id] === o) { delete optimistic[id]; M.ents[id] = o.prev; changed([id]); } }, 10000);
+      optimistic[id] = o;
+      M.ents[id] = Object.assign({}, e, { state: st, attributes: Object.assign({}, e.attributes, at) });
+      changed([id]);
+    }
+    hub.call(domain, service, data, id);
+  }
   var A = {
     toggle: function (id) {
       var d = dom(id);
@@ -1996,7 +2025,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   setInterval(function () {
     var m = new Date().getMinutes();
     if (m !== lastMin) { lastMin = m; renderHeader(); tickClock(); if (M.intercom) renderAccess(); }
-    tickProgress();
+    if (S.fx === 'full' || new Date().getSeconds() % 5 === 0) tickProgress();
   }, 1000);
 
   /* ================= self update ================= */
