@@ -490,6 +490,17 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 .warnbox { margin: -4px 0 14px; padding: 10px 14px; border-radius: 14px; background: rgba(255, 107, 107, 0.18); color: var(--crit); font-weight: 600; font-size: 14px; box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.4); }
 .hd-date .alert { color: var(--crit); font-weight: 600; }
 
+.trow { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 44px; }
+.trow + .trow { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); }
+.tline { -webkit-flex: none; flex: none; min-width: 58px; height: 28px; padding: 0 8px; margin-right: 12px; border-radius: 8px; background: #f4c400; color: #1d1a00; font-weight: 800; font-size: 14px; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; box-sizing: border-box; }
+.tline.rail { background: #2fa84f; color: #fff; }
+.tinfo { -webkit-flex: 1; flex: 1; min-width: 0; }
+.tinfo b { display: block; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tinfo > span { display: block; color: var(--ink-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.tbad { color: var(--crit); font-weight: 600; }
+.tok { color: var(--ok); }
+.sw .trow .tline { min-width: 36px; height: 24px; font-size: 12.5px; }
+
 /* access widget */
 .wa { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; min-height: 44px; }
 .wa + .wa { margin-top: 12px; }
@@ -593,7 +604,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
 (function () {
   'use strict';
 
-  var BUILD = '2026-11-27 17:51';
+  var BUILD = '2026-11-27 18:00';
 
   /* ================= helpers ================= */
   function $(s, r) { return (r || document).querySelector(s); }
@@ -689,13 +700,15 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     mode: 'demo', haUrl: '', haToken: '',
     wallpaper: 'aurora', dim: 25, fx: oldIOS ? 'balanced' : 'full',
     saverAfter: 90, nightDim: true, clockStyle: 'thin',
-    widgets: { date: true, weather: true, calendar: true, music: true, climate: true },
-    cards: { scenes: true, media: true, climate: true, access: true },
-    room: 'all', media: null, motion: '', blackAfter: 0, scenes: null
+    widgets: { date: true, weather: true, calendar: true, music: true, climate: true, train: true },
+    cards: { scenes: true, media: true, climate: true, access: true, train: true },
+    room: 'all', media: null, motion: '', blackAfter: 0, scenes: null,
+    train: { from: null, to: null, walk: 5 }
   };
   var S = Object.assign({}, DEF, load('hub.settings', {}));
   S.widgets = Object.assign({}, DEF.widgets, S.widgets || {});
   S.cards = Object.assign({}, DEF.cards, S.cards || {});
+  S.train = Object.assign({}, DEF.train, S.train || {});
   var customWall = null;
   try { customWall = localStorage.getItem('hub.wallpaper'); } catch (e) { customWall = null; }
   function save() { store('hub.settings', S); }
@@ -1267,10 +1280,11 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     if (S.cards.media && M.players.length) h += '<section class="glass w" id="cardMedia"></section>';
     if (S.cards.climate && M.climate) h += '<section class="glass w" id="cardClimate"></section>';
     if (S.cards.access && (M.lock || M.intercom)) h += '<section class="glass w" id="cardAccess"></section>';
+    if (S.cards.train && trainReady()) h += '<section class="glass w" id="cardTrain"></section>';
     $('#colLeft').innerHTML = h;
     $('#colLeft').hidden = !h;
     $('.grid').style.gridTemplateColumns = h ? '' : 'minmax(0,1fr)';
-    renderMedia(); renderClimate(); renderAccess();
+    renderMedia(); renderClimate(); renderAccess(); renderTrain();
   }
   var mediaDrag = false;
   function renderMedia() {
@@ -1445,6 +1459,74 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       '<span class="ico">' + ico(iconFor(id)) + '</span><span class="name">' + esc(name(id)) + '</span><span class="state">' + esc(stateText(id)) + '</span></div>';
   }
 
+  /* ---------- public transport (transport.rest, called directly from the iPad) ---------- */
+  var TRANSIT = 'https://v6.db.transport.rest';
+  M.train = { at: 0, list: [], error: null };
+  function trainReady() { return !!(S.train && S.train.from && S.train.to); }
+  function getJSON(url, ok, fail) {
+    var x = new XMLHttpRequest();
+    x.open('GET', url, true);
+    x.timeout = 20000;
+    x.onload = function () {
+      if (x.status !== 200) return fail('HTTP ' + x.status);
+      try { ok(JSON.parse(x.responseText)); } catch (e) { fail('Antwort unlesbar'); }
+    };
+    x.onerror = function () { fail('nicht erreichbar'); };
+    x.ontimeout = function () { fail('Zeitüberschreitung'); };
+    x.send();
+  }
+  function parseJourney(j) {
+    var ride = (j.legs || []).filter(function (l) { return !l.walking; });
+    var first = ride[0], last = ride[ride.length - 1];
+    if (!first) return null;
+    var dep = new Date(first.departure || first.plannedDeparture);
+    var line = first.line || {};
+    return {
+      line: line.name || line.productName || '', product: line.product || '',
+      dep: dep, planned: new Date(first.plannedDeparture || first.departure), delay: first.departureDelay != null ? Math.round(first.departureDelay / 60) : null,
+      platform: first.departurePlatform || first.plannedDeparturePlatform || '',
+      arr: new Date(last.arrival || last.plannedArrival), changes: ride.length - 1,
+      cancelled: !!(first.cancelled || last.cancelled)
+    };
+  }
+  var trainTimer = null;
+  function fetchTrain() {
+    clearTimeout(trainTimer);
+    if (!trainReady()) return;
+    trainTimer = setTimeout(fetchTrain, 60000);
+    if (saverOn && !S.widgets.train) return;
+    var dep = new Date(Date.now() + (S.train.walk || 0) * 60000).toISOString();
+    getJSON(TRANSIT + '/journeys?from=' + encodeURIComponent(S.train.from.id) + '&to=' + encodeURIComponent(S.train.to.id) +
+      '&departure=' + encodeURIComponent(dep) + '&results=4&stopovers=false&remarks=false&language=de',
+      function (d) {
+        M.train = { at: Date.now(), list: (d.journeys || []).map(parseJourney).filter(Boolean), error: null };
+        renderTrain(); renderSaver();
+      },
+      function (err) { M.train.error = err; renderTrain(); });
+  }
+  function trainRows(max) {
+    var now = Date.now(), walk = (S.train.walk || 0) * 60000;
+    return M.train.list.filter(function (t) { return t.dep.getTime() - now >= walk - 30000 || t.cancelled; }).slice(0, max);
+  }
+  function minsUntil(t) { var m = Math.round((t.dep.getTime() - Date.now()) / 60000); return m <= 0 ? 'jetzt' : 'in ' + m + ' Min'; }
+  function hm(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function trainRow(t, compact) {
+    var badge = '<span class="tline' + (/suburban|regional|national/.test(t.product) ? ' rail' : '') + '">' + esc(t.line) + '</span>';
+    var when = t.cancelled ? '<b class="tbad">fällt aus</b>' : '<b>' + minsUntil(t) + '</b>';
+    var delay = t.delay ? ' <span class="tbad">+' + t.delay + '</span>' : t.delay === 0 ? ' <span class="tok">pünktlich</span>' : '';
+    var sub = hm(t.planned) + delay + (t.platform && !compact ? ' · Gleis ' + esc(t.platform) : '') + ' · an ' + hm(t.arr) + (t.changes && !compact ? ' · ' + t.changes + '× umsteigen' : '');
+    return '<div class="trow">' + badge + '<div class="tinfo">' + when + '<span>' + sub + '</span></div></div>';
+  }
+  function renderTrain() {
+    var el = $('#cardTrain'); if (!el) return;
+    var rows = trainRows(3);
+    var h = '<div class="w-lbl" style="margin-bottom:8px">Nach ' + esc(S.train.to.name) + '</div>';
+    if (rows.length) h += rows.map(function (t) { return trainRow(t); }).join('');
+    else if (M.train.error) h += '<div class="empty">Fahrplan ' + esc(M.train.error) + '</div>';
+    else h += '<div class="empty">' + (M.train.at ? 'Keine Verbindung in nächster Zeit' : 'Lädt …') + '</div>';
+    el.innerHTML = h;
+  }
+
   /* ---------- screensaver ---------- */
   var BDAY = 'sensor.hub_geburtstage';
   function bdayEvents(days) {
@@ -1486,6 +1568,9 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       }).join('') : '<div class="empty">Keine Termine in den nächsten Tagen</div>') + '</div>';
     }
     var pid = M.players.filter(function (id) { return M.ents[id] && M.ents[id].state === 'playing'; })[0];
+    if (S.widgets.train && trainReady() && trainRows(2).length) {
+      h += '<div class="glass sw"><h4>Nach ' + esc(S.train.to.name) + '</h4>' + trainRows(2).map(function (t) { return trainRow(t, true); }).join('') + '</div>';
+    }
     if (S.widgets.music && pid) {
       var pe = M.ents[pid];
       h += '<div class="glass sw sw-music"><div class="art" style="' + artStyle(pe) + '"></div><div style="min-width:0"><div class="t">' + esc(attr(pe, 'media_title', '')) + '</div><div class="a">' + esc(attr(pe, 'media_artist', '')) + ' · ' + esc(name(pid)) + '</div></div></div>';
@@ -1664,7 +1749,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     h += '<div class="set-sec"><h3>Glaseffekt</h3><div class="row"><span class="rl">Stärke<small>„Sparsam“ läuft auf alten iPads am flüssigsten</small></span><div class="seg-s">' +
       [['full', 'Voll'], ['balanced', 'Ausgewogen'], ['light', 'Sparsam']].map(function (o) { return '<button class="' + (S.fx === o[0] ? 'is-active' : '') + '" data-act="fx" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div></div>';
 
-    h += '<div class="set-sec"><h3>Dashboard</h3>' + [['scenes', 'Szenen'], ['media', 'Musik'], ['climate', 'Klima'], ['access', 'Eingang & Klingel']].map(function (o) {
+    h += '<div class="set-sec"><h3>Dashboard</h3>' + [['scenes', 'Szenen'], ['media', 'Musik'], ['climate', 'Klima'], ['access', 'Eingang & Klingel'], ['train', 'Bahn']].map(function (o) {
       return '<div class="row"><span class="rl">' + o[1] + '</span><div class="switch' + (S.cards[o[0]] ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + !!S.cards[o[0]] + '" data-act="card" data-arg="' + o[0] + '"></div></div>';
     }).join('') + '</div>';
 
@@ -1681,7 +1766,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     h += '<div class="set-sec"><h3>Standby</h3><div class="row"><span class="rl">Standby nach</span><div class="seg-s">' +
       [[30, '30 s'], [90, '1,5 min'], [300, '5 min'], [0, 'Nie']].map(function (o) { return '<button class="' + (S.saverAfter === o[0] ? 'is-active' : '') + '" data-act="saverAfter" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
       '<div class="row"><span class="rl">Uhr</span><div class="seg-s">' + [['thin', 'Dünn'], ['bold', 'Fett']].map(function (o) { return '<button class="' + (S.clockStyle === o[0] ? 'is-active' : '') + '" data-act="clockStyle" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
-      [['date', 'Datum'], ['weather', 'Wetter'], ['calendar', 'Termine'], ['music', 'Musik'], ['climate', 'Raumklima']].map(function (o) {
+      [['date', 'Datum'], ['weather', 'Wetter'], ['calendar', 'Termine'], ['train', 'Bahn'], ['music', 'Musik'], ['climate', 'Raumklima']].map(function (o) {
         return '<div class="row"><span class="rl">' + o[1] + '</span><div class="switch' + (S.widgets[o[0]] ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + !!S.widgets[o[0]] + '" data-act="widget" data-arg="' + o[0] + '"></div></div>';
       }).join('') +
       '<div class="row"><span class="rl">Nachts abdunkeln<small>22 bis 6 Uhr, rote Uhr</small></span><div class="switch' + (S.nightDim ? ' on' : '') + '" role="switch" tabindex="0" aria-checked="' + !!S.nightDim + '" data-act="nightDim"></div></div></div>';
@@ -1693,6 +1778,21 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       '<div class="row"><span class="rl">Bildschirm schwarz<small>Wenn so lange niemand da war</small></span><div class="seg-s">' +
       [[0, 'Nie'], [5, '5 min'], [15, '15 min'], [30, '30 min']].map(function (o) { return '<button class="' + (S.blackAfter === o[0] ? 'is-active' : '') + '" data-act="blackAfter" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>' +
       (S.mode === 'demo' && motionId() ? '<button class="btn" style="width:100%;margin-top:10px" data-act="motionTest">Bewegung testen</button>' : '') + '</div>';
+
+    h += '<div class="set-sec"><h3>Bahn</h3>' +
+      '<div class="row"><span class="rl">Start<small>' + esc(S.train.from ? S.train.from.name : 'noch nicht gewählt') + '</small></span></div>' +
+      '<div class="row"><span class="rl">Ziel<small>' + esc(S.train.to ? S.train.to.name : 'noch nicht gewählt') + '</small></span></div>' +
+      '<label class="f-lbl" for="trainQuery">Haltestelle suchen</label>' +
+      '<div style="display:flex"><input class="field" id="trainQuery" type="search" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="z. B. Hauptbahnhof Leipzig" value="' + esc(M.trainQuery || '') + '" style="flex:1">' +
+      '<button class="btn" style="height:44px;margin:6px 0 0 8px;padding:0 16px" data-act="trainSearch">Suchen</button></div>' +
+      (M.trainMsg ? '<p class="note">' + esc(M.trainMsg) + '</p>' : '') +
+      (M.trainResults || []).map(function (r, i) {
+        return '<div class="row"><span class="rl">' + esc(r.name) + '</span><button class="btn" style="height:34px;padding:0 12px" data-act="trainSet" data-arg="from|' + i + '">Start</button>' +
+          '<button class="btn" style="height:34px;padding:0 12px;margin-left:6px" data-act="trainSet" data-arg="to|' + i + '">Ziel</button></div>';
+      }).join('') +
+      '<div class="row"><span class="rl">Fußweg zur Haltestelle<small>Bahnen, die du nicht mehr schaffst, werden ausgeblendet</small></span><div class="seg-s">' +
+      [0, 3, 5, 8, 10, 15].map(function (m) { return '<button class="' + (S.train.walk === m ? 'is-active' : '') + '" data-act="trainWalk" data-arg="' + m + '">' + m + '</button>'; }).join('') + '</div></div>' +
+      '<p class="note">Fahrplandaten: Deutsche Bahn über transport.rest, live mit Verspätungen.</p></div>';
 
     h += '<div class="set-sec"><h3>Verbindung</h3><div class="row"><span class="rl">Quelle</span><div class="seg-s">' +
       [['demo', 'Demo'], ['ha', 'Home Assistant']].map(function (o) { return '<button class="' + (S.mode === o[0] ? 'is-active' : '') + '" data-act="mode" data-arg="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div></div>';
@@ -1706,6 +1806,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     h += '<p class="note">Einstellungen und eigenes Hintergrundbild werden nur auf diesem Gerät gespeichert.<br>Version ' + BUILD + '</p></div>';
     openSheet(h, 'settings', null, true);
   }
+  function keepScroll(fn) { var sh = $('#sheet'), top = sh ? sh.scrollTop : 0; fn(); var n = $('#sheet'); if (n) n.scrollTop = top; }
   function defaultUrl() { return /^https?:$/.test(location.protocol) && !/claude|anthropic|usercontent/.test(location.host) ? location.origin : ''; }
   var connState = '', connMsg = '';
   function onConn(state, msg) {
@@ -1886,6 +1987,24 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     settings: function () { settingsSheet(); },
     standby: function () { showSaver(); },
     wake: function () { hideBlack(); hideSaver(); },
+    trainSearch: function () {
+      var q = ($('#trainQuery').value || '').trim(); M.trainQuery = q;
+      if (q.length < 3) { M.trainMsg = 'Bitte mindestens 3 Buchstaben eingeben.'; return keepScroll(settingsSheet); }
+      M.trainMsg = 'Suche …'; M.trainResults = []; keepScroll(settingsSheet);
+      getJSON(TRANSIT + '/locations?query=' + encodeURIComponent(q) + '&results=6&addresses=false&poi=false&language=de', function (d) {
+        M.trainResults = (d || []).filter(function (r) { return r.id && r.name; }).map(function (r) { return { id: r.id, name: r.name }; });
+        M.trainMsg = M.trainResults.length ? '' : 'Nichts gefunden. Anders schreiben, z. B. mit Stadt.';
+        if (sheetKind === 'settings') keepScroll(settingsSheet);
+      }, function (err) { M.trainMsg = 'Fahrplan-Suche ' + err + '.'; if (sheetKind === 'settings') keepScroll(settingsSheet); });
+    },
+    trainSet: function (arg) {
+      var p = arg.split('|'), r = (M.trainResults || [])[Number(p[1])]; if (!r) return;
+      S.train[p[0]] = { id: r.id, name: r.name }; save();
+      toast((p[0] === 'from' ? 'Start: ' : 'Ziel: ') + r.name);
+      M.train = { at: 0, list: [], error: null };
+      renderLeft(); fetchTrain(); keepScroll(settingsSheet);
+    },
+    trainWalk: function (m) { S.train.walk = Number(m); save(); fetchTrain(); keepScroll(settingsSheet); },
     scroll: function (k) { var el = $(k === 'climate' ? '#cardClimate' : '#cardAccess'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
     lightOn: function () { svc('light', 'turn_on', {}, sheetFor); },
     lightOff: function () { svc('light', 'turn_off', {}, sheetFor); },
@@ -1997,6 +2116,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   var volT = 0;
   document.addEventListener('input', function (ev) {
     var t = ev.target;
+    if (t.id === 'trainQuery') M.trainQuery = t.value;
     if (t.type === 'range') t.style.setProperty('--p', (t.value - t.min) / (t.max - t.min) * 100 + '%');
     if (t.id === 'volSlider') {
       mediaDrag = true;
@@ -2043,6 +2163,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     var m = new Date().getMinutes();
     if (m !== lastMin) { lastMin = m; renderHeader(); tickClock(); if (M.intercom) renderAccess(); }
     if (S.fx === 'full' || new Date().getSeconds() % 5 === 0) tickProgress();
+    if (new Date().getSeconds() % 30 === 0) { renderTrain(); }
   }, 1000);
 
   /* ================= self update ================= */
@@ -2065,6 +2186,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   $('#icoSet').innerHTML = ico('sliders');
   applyLook();
   startHub();
+  fetchTrain();
 })();
 </script>
 </body>
