@@ -38,3 +38,15 @@ Hinweis: Wird die Seite über GitHub Pages (https) geladen, blockiert der Browse
 Verbindungen zu einem Home Assistant mit `http://`-Adresse. Für den Live-Betrieb
 das Dashboard deshalb mit `update.sh` in Home Assistant installieren und auf dem
 iPad `http://homeassistant.local/local/homehub/index.html` öffnen.
+
+## Geburtstage aus iCloud-Kontakten
+
+`ha/birthdays.py` liest die Geburtstage aus den iCloud-Kontakten (CardDAV) und stellt
+sie als `sensor.hub_geburtstage` bereit. Einmalig im Terminal-Add-on einrichten:
+
+```
+SHA=$(wget -qO- https://api.github.com/repos/collinkirschner/HomeHub/commits/main | grep -m1 '"sha"' | cut -d'"' -f4); wget -qO /tmp/hub-bday.sh "https://raw.githubusercontent.com/collinkirschner/HomeHub/$SHA/ha/install-birthdays.sh" && sh /tmp/hub-bday.sh
+```
+
+Das Skript fragt einmal nach Apple-ID und app-spezifischem Passwort und speichert sie nur
+auf dem Home Assistant (`/config/hub/icloud.json`).

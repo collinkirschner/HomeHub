@@ -1244,6 +1244,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
     parts.push(on ? on + (on === 1 ? ' Licht an' : ' Lichter an') : 'Alle Lichter aus');
     var lk = M.ents[M.lock];
     if (lk && lk.state !== 'locked') parts.push(name(M.lock) + ' offen');
+    bdayEvents(0).forEach(function (b) { parts.push(b.name + ' hat heute Geburtstag'); });
     var alerts = [];
     Object.keys(M.ents).forEach(function (v) { if (dom(v) === 'vacuum') vacIssues(v).forEach(function (t) { if (alerts.indexOf(t) < 0) alerts.push(t); }); });
     $('#dateLine').innerHTML = parts.map(esc).join('  ·  ') + alerts.map(function (t) { return '  ·  <span class="alert">' + esc(t) + '</span>'; }).join('');
@@ -1434,6 +1435,21 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
   }
 
   /* ---------- screensaver ---------- */
+  var BDAY = 'sensor.hub_geburtstage';
+  function bdayEvents(days) {
+    var e = M.ents[BDAY], list = (e && attr(e, 'birthdays', [])) || [], out = [];
+    var t = new Date(), today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    list.forEach(function (b) {
+      if (!b || !b.month || !b.day) return;
+      var d = new Date(today.getFullYear(), b.month - 1, b.day);
+      if (d < today) d = new Date(today.getFullYear() + 1, b.month - 1, b.day);
+      var diff = Math.round((d - today) / 86400000);
+      if (diff > days) return;
+      var age = b.year ? d.getFullYear() - b.year : null;
+      out.push({ title: b.name + ' hat Geburtstag' + (age ? ' (' + age + ')' : ''), start: d, allDay: true, cal: '#ff7ac8', today: diff === 0, name: b.name });
+    });
+    return out;
+  }
   function fmtEvTime(ev) {
     var d = ev.start, t = new Date(), tm = new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1);
     var same = d.toDateString() === t.toDateString();
@@ -1453,7 +1469,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
       h += '</div>';
     }
     if (S.widgets.calendar) {
-      var evs = M.events.slice(0, 4);
+      var evs = M.events.concat(bdayEvents(3)).sort(function (a, b) { return a.start - b.start || (b.allDay ? 1 : 0) - (a.allDay ? 1 : 0); }).slice(0, 4);
       h += '<div class="glass sw"><h4>Termine</h4>' + (evs.length ? evs.map(function (ev) {
         return '<div class="ev"><span class="tm">' + esc(fmtEvTime(ev)) + '</span><span class="ti"><i class="cal" style="--c:' + esc(ev.cal) + '"></i>' + esc(ev.title) + '</span></div>';
       }).join('') : '<div class="empty">Keine Termine in den nächsten Tagen</div>') + '</div>';
@@ -1502,6 +1518,7 @@ input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border: 0; bo
         var t = document.createElement('div'); t.innerHTML = tile(id);
         el.parentNode.replaceChild(t.firstChild, el);
       });
+      if (id === BDAY) { renderSaver(); renderStatus(); }
       if (sheetFor === id || (sheetKind === 'vacuum' && (M.vacExtras[sheetFor] || []).indexOf(id) >= 0)) refreshSheet();
       if (id === motionId() && M.ents[id] && M.ents[id].state === 'on') onMotion();
     });
